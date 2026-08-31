@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="popup.css"><link rel="stylesheet" href="popup-fixes.css"><title>文章摆渡</title></head>
+<body><main>
+<header id="app-header">
+  <button id="back" class="back-button hidden" aria-label="返回"><span>‹</span>返回</button>
+  <img id="header-brand" class="brand-icon" src="logo.svg" alt="">
+  <strong id="page-title">文章摆渡</strong>
+</header>
+<section id="home" class="page active">
+  <div class="hero"><img class="hero-mark" src="logo.svg" alt="文章摆渡 Logo"><h1>文章摆渡</h1><p>把掘金文章安全送达 CSDN 草稿箱</p></div>
+  <nav>
+    <button data-page="platform"><span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg></span><span class="nav-copy"><b>平台管理</b><small id="platform-summary">正在检查 CSDN 登录状态</small></span><em>›</em></button>
+    <button data-page="history"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.6"/><path d="M4 4v4.6h4.6M12 8v4l2.8 1.8"/></svg></span><span class="nav-copy"><b>同步历史</b><small id="history-summary">查看全部同步记录</small></span><em>›</em></button>
+    <button data-page="settings"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M9.8 3.6h4.4l.7 2.2 2 .9 2.1-1 2.2 3.8-1.6 1.7.2 2.2 1.4 1.7-2.2 3.8-2.2-.7-1.8 1.3-.5 2.3H9.8l-.7-2.2-2-.9-2.1 1-2.2-3.8 1.6-1.7-.2-2.2-1.4-1.7L5 5.2l2.2.7z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="nav-copy"><b>设置</b><small>发布联动与隐私说明</small></span><em>›</em></button>
+  </nav>
+</section>
+<section id="platform" class="page"><div class="content-actions"><span>已接入 1 个平台</span><button id="platform-refresh">↻ 刷新状态</button></div><div class="platform-card"><div class="platform-row"><div class="csdn-logo">C</div><div class="platform-copy"><b>CSDN</b><small>文章将保存为草稿，不会公开发布</small></div><div id="login-state" class="checking">检测中…</div></div><p class="tip">同步入口位于掘金编辑器的发布面板中。</p></div></section>
+<section id="history" class="page history-page"><div class="history-meta"><span id="history-count">最近 0 条记录</span><button id="history-clear" disabled>清空</button></div><div id="task-list" class="task-list"></div></section>
+<section id="settings" class="page"><label class="setting"><span><b>发布后自动同步</b><small>发布弹窗中的 CSDN 同步选项默认勾选</small></span><input id="auto-sync" type="checkbox"><i></i></label><div class="notice"><b>安全边界</b><p>插件只读取 CSDN 的登录标识以判断登录状态，不读取密码，不保存或上传 Cookie。文章内容只在当前 Chrome 与 CSDN 之间流转。</p></div></section>
+<div id="toast" role="status"></div></main><script type="module" src="popup.js"></script></body></html>

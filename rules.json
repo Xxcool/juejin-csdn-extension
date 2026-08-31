@@ -1,0 +1,66 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {"header": "Origin", "operation": "set", "value": "https://editor.csdn.net"},
+        {"header": "Referer", "operation": "set", "value": "https://editor.csdn.net/"}
+      ]
+    },
+    "condition": {
+      "urlFilter": "||bizapi.csdn.net/blog-console-api/",
+      "excludedInitiatorDomains": ["csdn.net"],
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  },
+  {
+    "id": 2,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {"header": "Origin", "operation": "set", "value": "https://juejin.cn"},
+        {"header": "Referer", "operation": "set", "value": "https://juejin.cn/"}
+      ]
+    },
+    "condition": {
+      "urlFilter": "||api.juejin.cn/",
+      "excludedInitiatorDomains": ["juejin.cn"],
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  },
+  {
+    "id": 3,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {"header": "Origin", "operation": "set", "value": "https://editor.csdn.net"},
+        {"header": "Referer", "operation": "set", "value": "https://editor.csdn.net/"}
+      ]
+    },
+    "condition": {
+      "urlFilter": "||myhuaweicloud.com/",
+      "excludedInitiatorDomains": ["csdn.net"],
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  },
+  {
+    "id": 4,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {"header": "Origin", "operation": "set", "value": "https://editor.csdn.net"},
+        {"header": "Referer", "operation": "set", "value": "https://editor.csdn.net/"}
+      ]
+    },
+    "condition": {
+      "urlFilter": "||bizapi.csdn.net/resource-api/v1/image/direct/upload/signature",
+      "excludedInitiatorDomains": ["csdn.net"],
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  }
+]

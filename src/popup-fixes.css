@@ -1,0 +1,47 @@
+/* 二级页采用左右两端布局；首页入口图标统一为相同描边风格。 */
+:root{--blue:#1d7dfa}
+.brand-icon{box-shadow:0 4px 10px #1d7dfa33}
+.hero-mark{box-shadow:0 14px 28px #1d7dfa35}
+#app-header.subpage{justify-content:space-between}
+#app-header.subpage #page-title{flex:0 0 auto;font-size:13px;font-weight:600;text-align:right}
+.nav-icon{display:grid;place-items:center;flex:0 0 32px!important;width:32px;height:32px;margin-right:10px;border-radius:9px;background:#edf4ff;color:#246bfe}
+.nav-icon svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+nav .nav-copy{display:grid;flex:1;gap:2px}
+/* 同步历史采用紧凑的文章卡片，文章摘要与平台结果分层展示。 */
+.history-page{background:#fbfcfe}
+.history-meta{height:44px;padding:0 18px;background:#fff}
+.history-meta>span{letter-spacing:.01em}
+.history-meta button{padding:5px 0;color:#ff4d5e;transition:opacity .15s}
+.history-meta button:disabled{opacity:.3;cursor:default}
+.task-list{height:406px;overflow-x:hidden;padding:10px 14px 20px;gap:8px}
+.history-card{min-width:0;overflow:hidden;border:1px solid #e9edf3;border-radius:11px;background:#fff;box-shadow:0 2px 8px #20304d0a;transition:border-color .16s,box-shadow .16s}
+.history-card:hover{border-color:#dce3ed;box-shadow:0 5px 14px #20304d10}
+.history-card summary{display:grid;grid-template-columns:38px minmax(0,1fr) 16px;align-items:center;gap:9px;min-height:59px;padding:8px 10px;list-style:none;cursor:pointer;user-select:none}
+.history-card summary::-webkit-details-marker{display:none}
+.history-cover{position:relative;display:grid;place-items:center;width:38px;height:38px;overflow:hidden;border-radius:8px;background:#f5f7fa;color:#c5ccd7}
+.history-cover svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.history-cover img{position:absolute;inset:0;z-index:1;width:100%;height:100%;object-fit:cover;background:#f5f7fa}
+.history-copy{display:grid;min-width:0;gap:4px}
+.history-copy>b{display:-webkit-box;min-width:0;overflow:hidden;color:#202838;font-size:12px;font-weight:600;line-height:18px;overflow-wrap:anywhere;word-break:break-word;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.history-copy small{display:flex;align-items:center;min-width:0;color:#a1a9b6;font-size:9px;line-height:13px;white-space:nowrap}
+.history-copy small strong{font-weight:600}
+.history-copy small strong.success{color:#13b76a}
+.history-copy small strong.failure{color:#ff5364}
+.history-copy small strong.working{color:#2878ee}
+.history-copy small i{margin:0 5px;color:#d1d6de;font-style:normal}
+.history-chevron{position:relative;width:14px;height:14px;color:#bdc5d1}
+.history-chevron:before{content:"";position:absolute;left:4px;top:5px;width:5px;height:5px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);transition:transform .18s,top .18s}
+.history-card[open] .history-chevron:before{top:7px;transform:rotate(225deg)}
+.platform-result{display:grid;grid-template-columns:15px minmax(0,1fr) auto auto;align-items:center;gap:7px;min-height:39px;padding:7px 10px;border-top:1px solid #edf0f4;background:#fafbfd}
+.result-icon{display:grid;place-items:center;width:13px;height:13px;border:1.5px solid currentColor;border-radius:50%;font-size:9px;font-weight:700;line-height:1}
+.platform-result.success .result-icon{color:#13b76a}
+.platform-result.failure .result-icon{color:#ff5364}
+.platform-result.working .result-icon{color:#2878ee}
+.platform-result-copy{display:grid;min-width:0;gap:2px}
+.platform-result-copy>b{color:#495366;font-size:11px;font-weight:500}
+.platform-error{max-width:170px;margin:0;overflow:hidden;color:#ff5364;font-size:9px;line-height:13px;text-overflow:ellipsis;white-space:nowrap}
+.platform-state{color:#8b95a5;font-size:9px;white-space:nowrap}
+.history-action{border:0;background:transparent;color:#1d7dfa;font-size:10px;white-space:nowrap;cursor:pointer}
+.history-action:hover{text-decoration:underline}
+.history-action.retry{color:#ff5364}
+.history-action:disabled{opacity:.5;cursor:wait;text-decoration:none}
