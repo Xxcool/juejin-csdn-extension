@@ -18,7 +18,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run release:zip
-      - name: Create GitHub Release
-        run: gh release create "$GITHUB_REF_NAME" release/*.zip --generate-notes --verify-tag
+      - name: Create or update GitHub Release
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release/*.zip --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release/*.zip --generate-notes --verify-tag
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
