@@ -1,10 +1,12 @@
 // 扩展后台协调器：管理登录状态、同步任务和 CSDN 草稿写入。
 import {allTasks,getSettings,patchTask,putTask,saveSettings,saveTasks} from './core/store';
 import {extractCsdnArticleId,isInterruptedTask,isUncertainCreateTask,withPublishedArticleId} from './core/task';
+import {classifySyncError} from './core/diagnostic';
+import {isSupportedMessage} from './core/message';
 import {fetchJuejinDraftByArticleId} from './source/juejin-api';
 import {csdnAdapter} from './targets/csdn';
 import {checkCsdnAuth,saveDraftViaApi} from './targets/csdn-api';
-import type {Article,ExtensionSettings,SyncTask} from './types';
+import type {Article,ExtensionSettings,SyncTask,TaskStage} from './types';
 import {uid} from './types';
 
 const runningTasks=new Set<string>();
@@ -12,22 +14,26 @@ const runningTasks=new Set<string>();
 async function execute(task:SyncTask){
   if(runningTasks.has(task.id))return;
   runningTasks.add(task.id);
+  const startedAt=Date.now();
+  let stage:TaskStage='authentication';
   try{
-    await patchTask(task.id,{status:'checking-login',attempts:task.attempts+1,error:undefined,warnings:undefined,progress:{current:0,total:0,message:'正在检查 CSDN 登录状态'}});
+    await patchTask(task.id,{status:'checking-login',attempts:task.attempts+1,error:undefined,diagnostic:undefined,warnings:undefined,stats:undefined,progress:{current:0,total:0,message:'正在检查 CSDN 登录状态'}});
     const article=csdnAdapter.transform(task.article);
     await patchTask(task.id,{status:'transforming',progress:{current:0,total:0,message:'正在处理文章内容'}});
+    stage='authentication';
     const result=await saveDraftViaApi(article,{
       articleId:task.csdnArticleId,
-      onProgress:async progress=>{await patchTask(task.id,{status:'transforming',progress});},
-      onSaving:async()=>{await patchTask(task.id,{status:'writing',progress:{current:1,total:1,message:task.csdnArticleId?'正在更新 CSDN 草稿':'正在创建 CSDN 草稿'}});}
+      onPreparing:()=>{stage='content';},
+      onProgress:async progress=>{stage='images';await patchTask(task.id,{status:'transforming',progress});},
+      onSaving:async()=>{stage='draft';await patchTask(task.id,{status:'writing',progress:{current:1,total:1,message:task.csdnArticleId?'正在更新 CSDN 草稿':'正在创建 CSDN 草稿'}});}
     });
-    await patchTask(task.id,{status:'saved',draftUrl:result.draftUrl,csdnArticleId:result.articleId,warnings:result.warnings,progress:undefined});
+    await patchTask(task.id,{status:'saved',draftUrl:result.draftUrl,csdnArticleId:result.articleId,warnings:result.warnings,stats:{...result.stats,durationMs:Date.now()-startedAt},progress:undefined});
     await chrome.action.setBadgeBackgroundColor({color:'#1d6744'});
     await chrome.action.setBadgeText({text:'✓'});
     setTimeout(()=>chrome.action.setBadgeText({text:''}),5000);
   }catch(error){
-    const message=(error as Error).message;
-    await patchTask(task.id,{status:/登录/.test(message)?'needs-user':'failed',error:message,progress:undefined});
+    const diagnostic=classifySyncError(error,stage);
+    await patchTask(task.id,{status:diagnostic.category==='login'?'needs-user':'failed',error:diagnostic.message,diagnostic,progress:undefined});
     await chrome.action.setBadgeBackgroundColor({color:'#a24332'});
     await chrome.action.setBadgeText({text:'!'});
     throw error;
@@ -42,7 +48,7 @@ async function create(article:Article){
   if(active)return active;
   const now=new Date().toISOString();
   const task:SyncTask=previous
-    ?{...previous,article,status:'queued',updatedAt:now,csdnArticleId:previous.csdnArticleId||extractCsdnArticleId(previous.draftUrl),error:undefined,warnings:undefined,progress:undefined}
+    ?{...previous,article,status:'queued',updatedAt:now,csdnArticleId:previous.csdnArticleId||extractCsdnArticleId(previous.draftUrl),error:undefined,diagnostic:undefined,warnings:undefined,stats:undefined,progress:undefined}
     :{id:uid(),article,platform:'csdn',status:'queued',createdAt:now,updatedAt:now,attempts:0};
   await putTask(task);
   await execute(task);
@@ -56,6 +62,7 @@ async function recoverInterruptedTasks(){
   await Promise.all(uncertain.map(task=>patchTask(task.id,{
     status:'needs-user',
     error:'上次创建 CSDN 草稿时扩展被中断，无法确认是否已保存。请先检查 CSDN 草稿箱，再决定是否重试。',
+    diagnostic:classifySyncError(new Error('上次创建 CSDN 草稿时扩展被中断，无法确认是否已保存。'),'recovery'),
     progress:undefined
   })));
   const interrupted=tasks.filter(isInterruptedTask);
@@ -98,6 +105,7 @@ async function resumePendingHistory(){
 
 chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   (async()=>{
+    if(!isSupportedMessage(message)){reply({ok:false,message:'不支持的扩展消息'});return;}
     await recovery;
     if(message.type==='STAGE_ARTICLE'){
       await chrome.storage.session.set({stagedArticle:{article:message.article,sourceTabId:sender.tab?.id,expiresAt:Date.now()+120000}});

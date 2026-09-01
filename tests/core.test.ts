@@ -3,8 +3,10 @@ import {afterEach,describe,expect,it,vi} from 'vitest';
 import {mapConcurrent,retry} from '../src/core/async';
 import {uniqueTasks} from '../src/core/store';
 import {extractCsdnArticleId,isInterruptedTask,isUncertainCreateTask,withPublishedArticleId} from '../src/core/task';
+import {classifySyncError} from '../src/core/diagnostic';
+import {isSupportedMessage} from '../src/core/message';
 import {fetchJuejinDraftByArticleId} from '../src/source/juejin-api';
-import {applyImageTransfers,buildSaveArticleBody,checkCsdnAuth,collectExternalImages,imageExtension,normalizeMarkdown} from '../src/targets/csdn-api';
+import {applyImageTransfers,buildSaveArticleBody,checkCsdnAuth,collectExternalImages,imageExtension,normalizeMarkdown,summarizeImageTransfers} from '../src/targets/csdn-api';
 import type {Article,SyncTask} from '../src/types';
 
 const article:Article={id:'juejin-1',title:'测试文章',markdown:'正文内容足够长，用于测试同步请求。',tags:['TypeScript'],sourceUrl:'https://juejin.cn/post/1'};
@@ -55,6 +57,26 @@ describe('任务历史',()=>{
   });
 });
 
+describe('后台消息与失败诊断',()=>{
+  it('只接受已声明的扩展消息',()=>{
+    expect(isSupportedMessage({type:'GET_TASKS'})).toBe(true);
+    expect(isSupportedMessage({type:'UNKNOWN'})).toBe(false);
+    expect(isSupportedMessage(null)).toBe(false);
+  });
+
+  it('区分登录、限流、网络和平台接口异常',()=>{
+    expect(classifySyncError(new Error('请先登录 CSDN'),'authentication')).toMatchObject({category:'login',stage:'authentication'});
+    expect(classifySyncError(new Error('请求失败 (429)'),'draft')).toMatchObject({category:'rate-limit'});
+    expect(classifySyncError(new Error('Failed to fetch'),'images')).toMatchObject({category:'network'});
+    expect(classifySyncError(new Error('Invalid Signature'),'authentication')).toMatchObject({category:'platform-change'});
+    expect(classifySyncError(new Error('CSDN API 请求失败 (403)'),'draft')).toMatchObject({category:'platform-change'});
+  });
+
+  it('对诊断内容中的敏感查询参数脱敏',()=>{
+    expect(classifySyncError(new Error('失败 https://example.com/?token=secret&x=1'),'network').message).toContain('token=***');
+  });
+});
+
 describe('CSDN 内容与保存契约',()=>{
   it('清理掘金主题元数据并统一代码围栏',()=>{
     expect(normalizeMarkdown('---\ntheme: juejin\nhighlight: atom-one-dark\n---\n~~~ts\nconst a=1\n~~~')).toBe('```ts\nconst a=1\n```');
@@ -88,6 +110,10 @@ describe('CSDN 内容与保存契约',()=>{
       expect.stringContaining('正文图片转存失败，已保留原链接'),
       expect.stringContaining('封面转存失败，已忽略')
     ]);
+    expect(summarizeImageTransfers([
+      {src:'a',target:'uploaded-a'},
+      {src:'b',error:'403'}
+    ])).toEqual({imageTotal:2,imageSucceeded:1,imageFailed:1});
   });
 });
 

@@ -120,8 +120,12 @@ export function collectExternalImages(markdown:string){
 }
 
 /** CSDN 无法稳定读取掘金 CDN，保存前将正文和封面图片转存到 CSDN。 */
-type SaveDraftOptions={articleId?:string;onProgress?:(progress:TaskProgress)=>void|Promise<void>;onSaving?:()=>void|Promise<void>};
+type SaveDraftOptions={articleId?:string;onPreparing?:()=>void|Promise<void>;onProgress?:(progress:TaskProgress)=>void|Promise<void>;onSaving?:()=>void|Promise<void>};
 type ImageTransfer={src:string;target?:string;error?:string};
+
+export function summarizeImageTransfers(transfers:ImageTransfer[]){
+  return{imageTotal:transfers.length,imageSucceeded:transfers.filter(item=>item.target).length,imageFailed:transfers.filter(item=>item.error).length};
+}
 
 export function applyImageTransfers(markdown:string,cover:string|undefined,transfers:ImageTransfer[]){
   const replacements=new Map(transfers.filter(item=>item.target).map(item=>[item.src,item.target!]));
@@ -152,7 +156,7 @@ async function prepareArticle(article:Article,onProgress?:SaveDraftOptions['onPr
   });
   const transferred=applyImageTransfers(markdown,article.cover,transfers);
   const html=marked.parse(transferred.markdown,{async:false,gfm:true,breaks:false}) as string;
-  return{...transferred,html};
+  return{...transferred,html,stats:summarizeImageTransfers(transfers)};
 }
 
 export function buildSaveArticleBody(article:Article,prepared:{markdown:string;html:string;cover?:string},articleId?:string){
@@ -164,6 +168,7 @@ export async function saveDraftViaApi(article:Article,options:SaveDraftOptions={
   const auth=await checkCsdnAuth();
   if(!auth.ok)throw new Error(auth.message||'CSDN 登录状态检测失败');
   if(!auth.loggedIn)throw new Error('请先登录 CSDN');
+  await options.onPreparing?.();
   const prepared=await prepareArticle(article,options.onProgress);
   const body=buildSaveArticleBody(article,prepared,options.articleId);
   await options.onSaving?.();
@@ -177,5 +182,5 @@ export async function saveDraftViaApi(article:Article,options:SaveDraftOptions={
   const articleId=result.data?.id||result.data?.article_id;
   const draftUrl=result.data?.url||(articleId?'https://editor.csdn.net/md/?articleId='+articleId:'');
   if(!draftUrl||!articleId)throw new Error('CSDN 已保存草稿，但没有返回草稿标识');
-  return{draftUrl,articleId:String(articleId),warnings:prepared.warnings};
+  return{draftUrl,articleId:String(articleId),warnings:prepared.warnings,stats:prepared.stats};
 }

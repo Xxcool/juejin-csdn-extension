@@ -1,5 +1,6 @@
 // 插件弹窗交互：管理页面导航、平台登录状态、同步历史和设置。
 import type {SyncTask,TaskStatus} from './types';
+import {categoryLabels,stageLabels} from './core/diagnostic';
 
 const $=<T extends HTMLElement>(selector:string)=>document.querySelector<T>(selector)!;
 const pages=['home','platform','history','settings'];
@@ -75,6 +76,12 @@ function formatDate(value:string){
   return new Date(value).toLocaleString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).replaceAll('/','-');
 }
 
+function formatDuration(durationMs:number){
+  if(durationMs<1000)return`${durationMs} 毫秒`;
+  if(durationMs<60000)return`${(durationMs/1000).toFixed(1)} 秒`;
+  return`${Math.floor(durationMs/60000)} 分 ${Math.round(durationMs%60000/1000)} 秒`;
+}
+
 function statusKind(task:SyncTask){
   if(task.status==='saved')return task.warnings?.length?'warning':'success';
   if(task.status==='failed'||task.status==='needs-user')return'failure';
@@ -89,7 +96,9 @@ function taskCard(task:SyncTask){
     ?`<button class="history-action" data-open="${escapeHtml(task.draftUrl)}">查看草稿 <span>↗</span></button>`
     :(['failed','needs-user'].includes(task.status)?`<button class="history-action retry" data-retry="${escapeHtml(task.id)}">重新同步</button>`:'');
   const error=task.error?`<p class="platform-error">${escapeHtml(task.error)}</p>`:'';
+  const diagnostic=task.diagnostic?`<div class="task-diagnostic"><b>${categoryLabels[task.diagnostic.category]} · ${stageLabels[task.diagnostic.stage]}</b><span>${escapeHtml(task.diagnostic.suggestion)}</span></div>`:'';
   const warning=task.warnings?.length?`<p class="platform-warning" title="${escapeHtml(task.warnings.join('\n'))}">${escapeHtml(task.warnings.join('；'))}</p>`:'';
+  const stats=task.stats?`<p class="task-stats">耗时 ${formatDuration(task.stats.durationMs)}<i>·</i>图片 ${task.stats.imageSucceeded}/${task.stats.imageTotal} 成功${task.stats.imageFailed?`，${task.stats.imageFailed} 失败`:''}</p>`:'';
   const progress=task.progress?`<p class="task-progress"><span style="width:${task.progress.total?Math.round(task.progress.current/task.progress.total*100):12}%"></span></p>`:'';
   return`<details class="history-card" open>
     <summary>
@@ -99,7 +108,7 @@ function taskCard(task:SyncTask){
     </summary>
     <div class="platform-result ${kind}">
       <span class="result-icon" aria-hidden="true">${kind==='success'?'✓':kind==='failure'?'×':kind==='warning'?'!':'·'}</span>
-      <span class="platform-result-copy"><b>CSDN</b>${error}${warning}</span>
+      <span class="platform-result-copy"><b>CSDN</b>${stats}${error}${diagnostic}${warning}</span>
       <span class="platform-state">${task.progress?escapeHtml(task.progress.message):stateLabel}</span>
       ${action}
     </div>
