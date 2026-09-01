@@ -1,5 +1,5 @@
 export type PlatformId='csdn';
-export type Article={id:string;title:string;markdown:string;summary?:string;cover?:string;tags:string[];sourceUrl:string};
+export type Article={id:string;sourceDraftId?:string;title:string;markdown:string;summary?:string;cover?:string;tags:string[];sourceUrl:string};
 export type TaskStatus='queued'|'checking-login'|'transforming'|'writing'|'saved'|'failed'|'needs-user'|'needs-confirmation';
 export type TaskProgress={current:number;total:number;message:string};
 export type TaskStage='validation'|'authentication'|'content'|'images'|'draft'|'recovery';

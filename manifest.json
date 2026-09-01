@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "文章摆渡｜掘金同步到 CSDN",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "在掘金发布文章时，将内容同步保存到 CSDN 草稿箱。",
   "icons": {"16":"logo-16.png","32":"logo-32.png","48":"logo-48.png","128":"logo-128.png"},
   "permissions": ["storage", "declarativeNetRequestWithHostAccess"],

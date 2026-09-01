@@ -1,12 +1,12 @@
 // 扩展后台协调器：管理登录状态、同步任务和 CSDN 草稿写入。
-import {allTasks,deleteTask,getDraftMapping,getSettings,patchTask,preserveTaskMappings,putTask,saveDraftMapping,saveSettings,saveTasks} from './core/store';
-import {canDeleteTask,extractCsdnArticleId,isActiveTask,isInterruptedTask,isRetryableTask,isUncertainCreateTask,withPublishedArticleId} from './core/task';
+import {allTasks,deleteTask,getArticleDraftMapping,getSettings,patchTask,preserveTaskMappings,putTask,saveArticleDraftMapping,saveSettings,saveTasks} from './core/store';
+import {canDeleteTask,extractCsdnArticleId,findMatchingTask,isActiveTask,isInterruptedTask,isRetryableTask,isUncertainCreateTask} from './core/task';
 import {classifySyncError} from './core/diagnostic';
 import {isSupportedMessage} from './core/message';
 import {resolveCsdnCategories,shouldConfirmDraftUpdate} from './core/settings';
 import {fetchJuejinDraftByArticleId} from './source/juejin-api';
 import {csdnAdapter} from './targets/csdn';
-import {checkCsdnAuth,saveDraftViaApi} from './targets/csdn-api';
+import {checkCsdnAuth,saveDraftViaApi,validateCsdnArticle} from './targets/csdn-api';
 import type {Article,ExtensionSettings,SyncTask,TaskStage} from './types';
 import {uid} from './types';
 
@@ -16,8 +16,9 @@ async function execute(task:SyncTask){
   if(runningTasks.has(task.id))return;
   runningTasks.add(task.id);
   const startedAt=Date.now();
-  let stage:TaskStage='authentication';
+  let stage:TaskStage='validation';
   try{
+    validateCsdnArticle(task.article);
     const settings=await getSettings();
     await patchTask(task.id,{status:'checking-login',attempts:task.attempts+1,error:undefined,diagnostic:undefined,warnings:undefined,stats:undefined,progress:{current:0,total:0,message:'正在检查 CSDN 登录状态'}});
     const article=csdnAdapter.transform(task.article);
@@ -33,7 +34,7 @@ async function execute(task:SyncTask){
       onSaving:async()=>{stage='draft';await patchTask(task.id,{status:'writing',progress:{current:1,total:1,message:task.csdnArticleId?'正在更新 CSDN 草稿':'正在创建 CSDN 草稿'}});}
     });
     await patchTask(task.id,{status:'saved',draftUrl:result.draftUrl,csdnArticleId:result.articleId,warnings:result.warnings,stats:{...result.stats,durationMs:Date.now()-startedAt},progress:undefined});
-    await saveDraftMapping(task.article.id,result.articleId,result.draftUrl);
+    await saveArticleDraftMapping(task.article,result.articleId,result.draftUrl);
     await chrome.action.setBadgeBackgroundColor({color:'#1d6744'});
     await chrome.action.setBadgeText({text:'✓'});
     setTimeout(()=>chrome.action.setBadgeText({text:''}),5000);
@@ -47,14 +48,13 @@ async function execute(task:SyncTask){
 }
 
 async function create(article:Article){
-  if(article.title.trim().length<2||article.markdown.trim().length<20)throw new Error('文章标题或正文不完整');
   const tasks=await allTasks();
-  const previous=tasks.find(item=>item.article.id===article.id&&item.platform==='csdn');
+  const previous=findMatchingTask(tasks,article);
   const active=previous&&isActiveTask(previous)?previous:undefined;
   if(active)return active;
   const settings=await getSettings();
   const now=new Date().toISOString();
-  const mapping=previous?undefined:await getDraftMapping(article.id);
+  const mapping=previous?undefined:await getArticleDraftMapping(article);
   const csdnArticleId=previous?.csdnArticleId||extractCsdnArticleId(previous?.draftUrl)||mapping?.csdnArticleId;
   const draftUrl=previous?.draftUrl||mapping?.draftUrl;
   const needsConfirmation=shouldConfirmDraftUpdate(settings,csdnArticleId);
@@ -98,7 +98,10 @@ async function syncHistory(request:Omit<PendingHistory,'expiresAt'>){
     return{ok:false,needsLogin:true,message:'请先登录 CSDN，返回掘金后将继续同步'};
   }
   const article=await fetchJuejinDraftByArticleId(request.articleId,request.uuid,request.title);
-  return{ok:true,articleId:request.articleId,task:await create(article)};
+  const previous=findMatchingTask(await allTasks(),article);
+  const mapping=previous?undefined:await getArticleDraftMapping(article);
+  const updated=!!(previous?.csdnArticleId||extractCsdnArticleId(previous?.draftUrl)||mapping?.csdnArticleId);
+  return{ok:true,articleId:request.articleId,updated,task:await create(article)};
 }
 
 async function resumePendingHistory(){
@@ -119,20 +122,8 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   (async()=>{
     if(!isSupportedMessage(message)){reply({ok:false,message:'不支持的扩展消息'});return;}
     await recovery;
-    if(message.type==='STAGE_ARTICLE'){
-      await chrome.storage.session.set({stagedArticle:{article:message.article,sourceTabId:sender.tab?.id,expiresAt:Date.now()+120000}});
-      reply({ok:true});
-    }else if(message.type==='CLEAR_STAGED_ARTICLE'){
-      await chrome.storage.session.remove('stagedArticle');
-      reply({ok:true});
-    }else if(message.type==='CONFIRM_PUBLISH'){
-      const {stagedArticle}=await chrome.storage.session.get('stagedArticle');
-      const sameTab=stagedArticle?.sourceTabId===undefined||stagedArticle.sourceTabId===sender.tab?.id;
-      if(stagedArticle?.article&&stagedArticle.expiresAt>Date.now()&&sameTab){
-        await chrome.storage.session.remove('stagedArticle');
-        const article=stagedArticle.article as Article;
-        reply({ok:true,task:await create(withPublishedArticleId(article,String(message.sourceUrl||article.sourceUrl)))});
-      }else reply({ok:false,message:'没有待确认文章'});
+    if(message.type==='SYNC_NEW_ARTICLE'){
+      reply({ok:true,task:await create(message.article as Article)});
     }else if(message.type==='CHECK_CSDN_STATUS'){
       reply(await checkCsdnAuth());
     }else if(message.type==='OPEN_CSDN_LOGIN'){

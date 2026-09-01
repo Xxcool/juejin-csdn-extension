@@ -1,13 +1,13 @@
 // 核心同步逻辑回归测试：覆盖任务去重、异步重试、并发上限和 CSDN 请求契约。
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {mapConcurrent,retry} from '../src/core/async';
-import {deleteTask,getDraftMapping,uniqueTasks} from '../src/core/store';
-import {canDeleteTask,extractCsdnArticleId,isActiveTask,isInterruptedTask,isRetryableTask,isUncertainCreateTask,withPublishedArticleId} from '../src/core/task';
+import {deleteTask,getDraftMapping,saveArticleDraftMapping,uniqueTasks} from '../src/core/store';
+import {articleIdentityKeys,canDeleteTask,extractCsdnArticleId,findMatchingTask,isActiveTask,isInterruptedTask,isRetryableTask,isUncertainCreateTask} from '../src/core/task';
 import {classifySyncError} from '../src/core/diagnostic';
 import {isSupportedMessage} from '../src/core/message';
 import {defaultSettings,formatCategoryMappings,normalizeSettings,parseCategoryMappings,resolveCsdnCategories,shouldConfirmDraftUpdate} from '../src/core/settings';
 import {fetchJuejinDraftByArticleId} from '../src/source/juejin-api';
-import {applyImageTransfers,buildSaveArticleBody,checkCsdnAuth,collectExternalImages,enforceImageFailurePolicy,imageExtension,normalizeMarkdown,summarizeImageTransfers} from '../src/targets/csdn-api';
+import {applyImageTransfers,buildSaveArticleBody,checkCsdnAuth,collectExternalImages,enforceImageFailurePolicy,imageExtension,normalizeMarkdown,summarizeImageTransfers,validateCsdnArticle} from '../src/targets/csdn-api';
 import type {Article,SyncTask} from '../src/types';
 
 const article:Article={id:'juejin-1',title:'测试文章',markdown:'正文内容足够长，用于测试同步请求。',tags:['TypeScript'],sourceUrl:'https://juejin.cn/post/1'};
@@ -52,9 +52,12 @@ describe('任务历史',()=>{
     expect(isInterruptedTask({...task,status:'saved'})).toBe(false);
   });
 
-  it('发布成功后使用正式文章 ID 作为同步身份',()=>{
-    expect(withPublishedArticleId(article,'https://juejin.cn/post/123456?from=editor')).toMatchObject({id:'123456',sourceUrl:'https://juejin.cn/post/123456?from=editor'});
-    expect(withPublishedArticleId(article,'https://juejin.cn/editor/drafts/9')).toMatchObject({id:'juejin-1'});
+  it('通过 draft_id 识别新建与历史流程中的同一篇文章',()=>{
+    const newArticle={...article,id:'draft-9',sourceDraftId:'draft-9'};
+    const historyArticle={...article,id:'article-123',sourceDraftId:'draft-9'};
+    const task:SyncTask={id:'saved',article:newArticle,platform:'csdn',status:'saved',createdAt:'2026-09-01T00:00:00Z',updatedAt:'2026-09-01T00:00:00Z',attempts:1,csdnArticleId:'456'};
+    expect(articleIdentityKeys(historyArticle)).toEqual(['article-123','draft-9']);
+    expect(findMatchingTask([task],historyArticle)).toBe(task);
   });
 
   it('识别活动、可重试和可删除任务',()=>{
@@ -72,6 +75,15 @@ describe('任务历史',()=>{
     await deleteTask(task.id);
     expect(storage.syncTasks).toEqual([]);
     await expect(getDraftMapping(article.id)).resolves.toMatchObject({csdnArticleId:'123',draftUrl:task.draftUrl});
+  });
+
+  it('为正式文章 ID 和 draft_id 保存同一份草稿映射',async()=>{
+    const storage:Record<string,unknown>={};
+    vi.stubGlobal('chrome',{storage:{local:{get:vi.fn(async(key:string)=>({[key]:storage[key]})),set:vi.fn(async(value:Record<string,unknown>)=>Object.assign(storage,value))}}});
+    const historyArticle={...article,id:'article-123',sourceDraftId:'draft-9'};
+    await saveArticleDraftMapping(historyArticle,'456','https://editor.csdn.net/md/?articleId=456');
+    await expect(getDraftMapping('article-123')).resolves.toMatchObject({csdnArticleId:'456'});
+    await expect(getDraftMapping('draft-9')).resolves.toMatchObject({csdnArticleId:'456'});
   });
 });
 
@@ -97,6 +109,8 @@ describe('同步设置',()=>{
 describe('后台消息与失败诊断',()=>{
   it('只接受已声明的扩展消息',()=>{
     expect(isSupportedMessage({type:'GET_TASKS'})).toBe(true);
+    expect(isSupportedMessage({type:'SYNC_NEW_ARTICLE'})).toBe(true);
+    expect(isSupportedMessage({type:'CONFIRM_PUBLISH'})).toBe(false);
     expect(isSupportedMessage({type:'UNKNOWN'})).toBe(false);
     expect(isSupportedMessage(null)).toBe(false);
   });
@@ -107,6 +121,7 @@ describe('后台消息与失败诊断',()=>{
     expect(classifySyncError(new Error('Failed to fetch'),'images')).toMatchObject({category:'network'});
     expect(classifySyncError(new Error('Invalid Signature'),'authentication')).toMatchObject({category:'platform-change'});
     expect(classifySyncError(new Error('CSDN API 请求失败 (403)'),'draft')).toMatchObject({category:'platform-change'});
+    expect(classifySyncError(new Error('CSDN API 请求失败 (400): 标题过短'),'draft')).toMatchObject({category:'content'});
   });
 
   it('对诊断内容中的敏感查询参数脱敏',()=>{
@@ -115,6 +130,12 @@ describe('后台消息与失败诊断',()=>{
 });
 
 describe('CSDN 内容与保存契约',()=>{
+  it('发送请求前按 CSDN 的 5~100 字标题规则校验',()=>{
+    const completeArticle={...article,markdown:'这是长度超过二十个字符的完整正文内容，用于验证发送前的内容校验。'};
+    expect(()=>validateCsdnArticle({...completeArticle,title:'测试'})).toThrow('至少需要 5 个字符');
+    expect(()=>validateCsdnArticle({...completeArticle,title:'这是有效标题'})).not.toThrow();
+  });
+
   it('清理掘金主题元数据并统一代码围栏',()=>{
     expect(normalizeMarkdown('---\ntheme: juejin\nhighlight: atom-one-dark\n---\n~~~ts\nconst a=1\n~~~')).toBe('```ts\nconst a=1\n```');
   });
@@ -166,7 +187,7 @@ describe('平台 API 边界',()=>{
       .mockResolvedValueOnce(new Response(JSON.stringify({err_no:0,err_msg:'',data:{article_draft:{id:'draft-target',title:'目标文章',mark_content:'这是足够长的 Markdown 正文，用于验证分页读取。',tags:[]}}}),{status:200}));
     vi.stubGlobal('fetch',fetchMock);
 
-    await expect(fetchJuejinDraftByArticleId('target','uuid')).resolves.toMatchObject({id:'target',title:'目标文章'});
+    await expect(fetchJuejinDraftByArticleId('target','uuid')).resolves.toMatchObject({id:'target',sourceDraftId:'draft-target',title:'目标文章'});
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({page_no:2,page_size:100});
   });
 

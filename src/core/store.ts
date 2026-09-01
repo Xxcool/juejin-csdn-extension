@@ -1,5 +1,6 @@
 import type {CsdnDraftMapping,ExtensionSettings,SyncTask} from '../types';
 import {defaultSettings,normalizeSettings} from './settings';
+import {articleIdentityKeys} from './task';
 const KEY='syncTasks';
 const SETTINGS_KEY='settings';
 const MAPPING_PREFIX='csdnDraftMapping:';
@@ -23,13 +24,23 @@ export async function saveDraftMapping(articleId:string,csdnArticleId:string,dra
   await chrome.storage.local.set({[MAPPING_PREFIX+articleId]:{articleId,csdnArticleId,draftUrl,updatedAt:new Date().toISOString()}});
 }
 export async function getDraftMapping(articleId:string){return(await chrome.storage.local.get(MAPPING_PREFIX+articleId))[MAPPING_PREFIX+articleId] as CsdnDraftMapping|undefined;}
+export async function saveArticleDraftMapping(article:SyncTask['article'],csdnArticleId:string,draftUrl?:string){
+  for(const identity of articleIdentityKeys(article))await saveDraftMapping(identity,csdnArticleId,draftUrl);
+}
+export async function getArticleDraftMapping(article:SyncTask['article']){
+  for(const identity of articleIdentityKeys(article)){
+    const mapping=await getDraftMapping(identity);
+    if(mapping)return mapping;
+  }
+  return undefined;
+}
 export async function preserveTaskMappings(tasks:SyncTask[]){
-  for(const task of tasks)if(task.csdnArticleId)await saveDraftMapping(task.article.id,task.csdnArticleId,task.draftUrl);
+  for(const task of tasks)if(task.csdnArticleId)await saveArticleDraftMapping(task.article,task.csdnArticleId,task.draftUrl);
 }
 export async function deleteTask(id:string){
   const tasks=await allTasks();
   const task=tasks.find(item=>item.id===id);
-  if(task?.csdnArticleId)await saveDraftMapping(task.article.id,task.csdnArticleId,task.draftUrl);
+  if(task?.csdnArticleId)await saveArticleDraftMapping(task.article,task.csdnArticleId,task.draftUrl);
   await saveTasks(tasks.filter(item=>item.id!==id));
 }
 export async function putTask(task:SyncTask){const tasks=await allTasks();const i=tasks.findIndex(x=>x.id===task.id);if(i>=0)tasks[i]=task;else tasks.unshift(task);await saveTasks(tasks);}

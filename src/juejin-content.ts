@@ -1,4 +1,4 @@
-// 掘金页面集成：新文章发布前暂存 Markdown，并在本人文章列表菜单中提供历史同步入口。
+// 掘金页面集成：新文章确认发布时立即同步 Markdown，并在本人文章列表菜单中提供历史同步入口。
 import type {Article} from './types';
 import {extractArticleId} from './source/juejin-api';
 
@@ -10,7 +10,6 @@ const SNAPSHOT_ATTRIBUTE='data-article-ferry-editor';
 const HISTORY_SYNC_ICON='<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 5.5A5.5 5.5 0 0 0 3.2 4L2 5.5M3 10.5A5.5 5.5 0 0 0 12.8 12l1.2-1.5M2 2.8V5.5h2.7M14 13.2v-2.7h-2.7"/></svg>';
 let autoDefault=true;
 let syncEnabled=false;
-let awaitingPublish=false;
 let loginState:LoginState='checking';
 let loginCheckSequence=0;
 const wiredButtons=new WeakSet<HTMLButtonElement>();
@@ -37,6 +36,7 @@ function readEditorArticle():Article{
   if(snapshot.title.trim().length<2||snapshot.markdown.trim().length<20)throw new Error('文章标题或正文不完整');
   return{
     id:snapshot.draftId||`draft-${Date.now()}`,
+    sourceDraftId:snapshot.draftId||undefined,
     title:snapshot.title.trim(),
     markdown:snapshot.markdown,
     tags:[],
@@ -44,28 +44,7 @@ function readEditorArticle():Article{
   };
 }
 
-function publishSucceeded(){
-  return !!extractArticleId(location.href)||/发布成功|发布完成|审核中/.test(document.body.innerText);
-}
-
-function startPublishConfirmation(){
-  if(awaitingPublish)return;
-  awaitingPublish=true;
-  const started=Date.now();
-  const timer=setInterval(()=>{
-    if(publishSucceeded()){
-      clearInterval(timer);
-      awaitingPublish=false;
-      chrome.runtime.sendMessage({type:'CONFIRM_PUBLISH',sourceUrl:location.href}).catch(()=>{});
-    }else if(Date.now()-started>60000){
-      clearInterval(timer);
-      awaitingPublish=false;
-      chrome.runtime.sendMessage({type:'CLEAR_STAGED_ARTICLE'}).catch(()=>{});
-    }
-  },500);
-}
-
-function showStageError(message:string){
+function showSyncError(message:string){
   const hint=document.querySelector<HTMLElement>('.jc-sync-option small');
   if(hint)hint.textContent=`同步未启动：${message}`;
 }
@@ -79,12 +58,11 @@ function wireFinalPublish(panel:HTMLElement){
     if(!syncEnabled)return;
     try{
       const article=readEditorArticle();
-      startPublishConfirmation();
-      chrome.runtime.sendMessage({type:'STAGE_ARTICLE',article}).then(result=>{
-        if(!result?.ok)showStageError(result?.message||'暂存失败');
-      }).catch(error=>showStageError(error.message));
+      chrome.runtime.sendMessage({type:'SYNC_NEW_ARTICLE',article}).then(result=>{
+        if(!result?.ok)showSyncError(result?.message||'同步失败');
+      }).catch(error=>showSyncError(error.message));
     }catch(error){
-      showStageError((error as Error).message);
+      showSyncError((error as Error).message);
     }
   },true);
 }
@@ -167,10 +145,10 @@ function getJuejinUuid(){
   return'';
 }
 
-function setHistoryButtonState(button:HTMLElement,state:'idle'|'working'|'login'|'saved',message=''){
+function setHistoryButtonState(button:HTMLElement,state:'idle'|'working'|'login'|'saved'|'updated',message=''){
   button.dataset.state=state;
   const label=button.querySelector<HTMLElement>('.jc-history-label');
-  if(label)label.textContent=state==='working'?'正在同步…':state==='login'?'登录后继续同步':state==='saved'?'已保存到 CSDN ✓':message||'同步到 CSDN';
+  if(label)label.textContent=state==='working'?'正在同步…':state==='login'?'登录后继续同步':state==='saved'?'已保存到 CSDN ✓':state==='updated'?'已更新 CSDN 草稿 ✓':message||'同步到 CSDN';
 }
 
 async function syncHistoryArticle(button:HTMLLIElement){
@@ -190,7 +168,7 @@ async function syncHistoryArticle(button:HTMLLIElement){
       return;
     }
     if(!result?.ok)throw new Error(result?.message||'同步失败');
-    setHistoryButtonState(button,'saved');
+    setHistoryButtonState(button,result.updated?'updated':'saved');
   }catch(error){
     setHistoryButtonState(button,'idle');
     alert(`文章摆渡：${(error as Error).message}`);
@@ -246,11 +224,6 @@ chrome.runtime.sendMessage({type:'GET_SETTINGS'}).then(result=>{
   inject();
   new MutationObserver(inject).observe(document.documentElement,{childList:true,subtree:true,characterData:true});
 });
-
-// 发布后发生页面跳转时，新页面仅在后台确有暂存文章时完成同步，不会同步普通浏览的文章。
-if(/\/(?:post|spost)\//.test(location.pathname)){
-  void chrome.runtime.sendMessage({type:'CONFIRM_PUBLISH',sourceUrl:location.href});
-}
 
 window.addEventListener('focus',()=>{
   void updateCsdnState();

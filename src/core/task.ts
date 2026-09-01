@@ -1,6 +1,15 @@
 // 同步任务的纯逻辑辅助函数：兼容旧记录并识别需要恢复的中断状态。
 import type {SyncTask} from '../types';
 
+export function articleIdentityKeys(article:SyncTask['article']){
+  return[...new Set([article.id,article.sourceDraftId].filter((value):value is string=>!!value))];
+}
+
+export function findMatchingTask(tasks:SyncTask[],article:SyncTask['article']){
+  const identities=new Set(articleIdentityKeys(article));
+  return tasks.find(task=>articleIdentityKeys(task.article).some(identity=>identities.has(identity))&&task.platform==='csdn');
+}
+
 export function extractCsdnArticleId(draftUrl?:string){
   if(!draftUrl)return undefined;
   try{return new URL(draftUrl).searchParams.get('articleId')||undefined;}catch{return undefined;}
@@ -18,8 +27,3 @@ export function isUncertainCreateTask(task:SyncTask){
 export function isActiveTask(task:SyncTask){return['queued','checking-login','transforming','writing'].includes(task.status);}
 export function isRetryableTask(task:SyncTask){return['failed','needs-user'].includes(task.status);}
 export function canDeleteTask(task:SyncTask){return!isActiveTask(task);}
-
-export function withPublishedArticleId(article:SyncTask['article'],sourceUrl:string){
-  const articleId=sourceUrl.match(/\/post\/(\d+)/)?.[1];
-  return{...article,id:articleId||article.id,sourceUrl:sourceUrl||article.sourceUrl};
-}

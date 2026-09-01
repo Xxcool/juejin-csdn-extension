@@ -9,6 +9,14 @@ const API='https://bizapi.csdn.net/blog-console-api/v3/mdeditor/saveArticle';
 const CSDN_WEB_API_KEY='203803574';
 const CSDN_WEB_SIGNING_KEY='9znpamsyl2c7cdrr9sas0le9vbc3r6ba';
 
+/** 按 CSDN Markdown 编辑器的标题规则在发起网络请求前拦截无效内容。 */
+export function validateCsdnArticle(article:Article){
+  const title=article.title.trim();
+  if(title.length<5)throw new Error('CSDN 标题至少需要 5 个字符，请修改掘金标题后重新同步');
+  if(title.length>100)throw new Error('CSDN 标题最多允许 100 个字符，请缩短掘金标题后重新同步');
+  if(article.markdown.trim().length<20)throw new Error('文章正文不完整，暂无法同步到 CSDN');
+}
+
 type UploadSignature={filePath:string;host:string;accessId:string;policy:string;signature:string;callbackUrl:string;callbackBody:string;callbackBodyType:string;customParam:{rtype:string;filePath:string;isAudit:number;'x-image-app':string;type:string;'x-image-suffix':string;username:string}};
 
 function nonce(){return crypto.randomUUID();}
@@ -172,6 +180,7 @@ export function buildSaveArticleBody(article:Article,prepared:{markdown:string;h
 
 /** 调用 CSDN 保存草稿 API。 */
 export async function saveDraftViaApi(article:Article,options:SaveDraftOptions={}):Promise<AdapterResult>{
+  validateCsdnArticle(article);
   const auth=await checkCsdnAuth();
   if(!auth.ok)throw new Error(auth.message||'CSDN 登录状态检测失败');
   if(!auth.loggedIn)throw new Error('请先登录 CSDN');

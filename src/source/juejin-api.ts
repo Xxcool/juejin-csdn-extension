@@ -46,6 +46,7 @@ export async function fetchJuejinDraftByArticleId(articleId:string,uuid:string,t
 
   return{
     id:articleId,
+    sourceDraftId:String(draftId),
     title:draft?.title?.trim()||entry?.article_info?.title?.trim()||titleFallback,
     markdown,
     tags:(draft?.tags||entry?.tags||[]).map(tag=>tag.tag_name||'').filter(Boolean),
