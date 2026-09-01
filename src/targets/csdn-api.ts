@@ -35,7 +35,11 @@ export async function checkCsdnAuth(){
   const path='/blog-console-api/v3/editor/getBaseInfo';
   try{
     const response=await fetch(`https://bizapi.csdn.net${path}`,{method:'GET',credentials:'include',headers:await signedHeaders(path,'GET'),signal:AbortSignal.timeout(6000)});
-    if(!response.ok)return{ok:true,loggedIn:false};
+    if(response.status===401)return{ok:true,loggedIn:false};
+    if(!response.ok){
+      const detail=response.headers.get('x-ca-error-message')||await response.text().catch(()=>'');
+      return{ok:false,loggedIn:false,message:`CSDN 接口鉴权异常 (${response.status})${detail?`：${detail.slice(0,120)}`:''}`};
+    }
     const result=await response.json() as {code?:number;data?:{name?:string;nickname?:string}};
     const loggedIn=result.code===200&&!!result.data?.name;
     return{ok:true,loggedIn,account:loggedIn?(result.data?.nickname||result.data?.name):undefined};
@@ -158,6 +162,7 @@ export function buildSaveArticleBody(article:Article,prepared:{markdown:string;h
 /** 调用 CSDN 保存草稿 API。 */
 export async function saveDraftViaApi(article:Article,options:SaveDraftOptions={}):Promise<AdapterResult>{
   const auth=await checkCsdnAuth();
+  if(!auth.ok)throw new Error(auth.message||'CSDN 登录状态检测失败');
   if(!auth.loggedIn)throw new Error('请先登录 CSDN');
   const prepared=await prepareArticle(article,options.onProgress);
   const body=buildSaveArticleBody(article,prepared,options.articleId);

@@ -24,13 +24,18 @@ async function post<T>(path:string,body:unknown,uuid:string):Promise<T>{
 
 /** 根据文章 ID 找到创作者草稿并读取原始 Markdown。 */
 export async function fetchJuejinDraftByArticleId(articleId:string,uuid:string,titleFallback=''):Promise<Article>{
-  const articles=await post<ArticleListItem[]>('/article/list_by_user',{
-    page_no:1,
-    page_size:100,
-    audit_status:null,
-    status:null
-  },uuid);
-  const entry=articles.find(item=>String(item.article_info?.article_id||'')===articleId);
+  const pageSize=100;
+  let entry:ArticleListItem|undefined;
+  for(let pageNo=1;!entry;pageNo++){
+    const articles=await post<ArticleListItem[]>('/article/list_by_user',{
+      page_no:pageNo,
+      page_size:pageSize,
+      audit_status:null,
+      status:null
+    },uuid);
+    entry=articles.find(item=>String(item.article_info?.article_id||'')===articleId);
+    if(entry||articles.length<pageSize)break;
+  }
   const draftId=entry?.article_info?.draft_id;
   if(!draftId)throw new Error('未在掘金创作者文章中找到对应草稿');
 

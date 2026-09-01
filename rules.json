@@ -10,7 +10,23 @@
       ]
     },
     "condition": {
-      "urlFilter": "||bizapi.csdn.net/blog-console-api/",
+      "urlFilter": "||bizapi.csdn.net/blog-console-api/v3/editor/getBaseInfo",
+      "excludedInitiatorDomains": ["csdn.net"],
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  },
+  {
+    "id": 5,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {"header": "Origin", "operation": "set", "value": "https://editor.csdn.net"},
+        {"header": "Referer", "operation": "set", "value": "https://editor.csdn.net/"}
+      ]
+    },
+    "condition": {
+      "urlFilter": "||bizapi.csdn.net/blog-console-api/v3/mdeditor/saveArticle",
       "excludedInitiatorDomains": ["csdn.net"],
       "resourceTypes": ["xmlhttprequest"]
     }

@@ -1,6 +1,6 @@
 // 扩展后台协调器：管理登录状态、同步任务和 CSDN 草稿写入。
 import {allTasks,getSettings,patchTask,putTask,saveSettings,saveTasks} from './core/store';
-import {extractCsdnArticleId,isInterruptedTask} from './core/task';
+import {extractCsdnArticleId,isInterruptedTask,isUncertainCreateTask,withPublishedArticleId} from './core/task';
 import {fetchJuejinDraftByArticleId} from './source/juejin-api';
 import {csdnAdapter} from './targets/csdn';
 import {checkCsdnAuth,saveDraftViaApi} from './targets/csdn-api';
@@ -51,7 +51,14 @@ async function create(article:Article){
 
 /** Service Worker 被回收或浏览器重启后，重新执行尚未结束的持久化任务。 */
 async function recoverInterruptedTasks(){
-  const interrupted=(await allTasks()).filter(isInterruptedTask);
+  const tasks=await allTasks();
+  const uncertain=tasks.filter(isUncertainCreateTask);
+  await Promise.all(uncertain.map(task=>patchTask(task.id,{
+    status:'needs-user',
+    error:'上次创建 CSDN 草稿时扩展被中断，无法确认是否已保存。请先检查 CSDN 草稿箱，再决定是否重试。',
+    progress:undefined
+  })));
+  const interrupted=tasks.filter(isInterruptedTask);
   await Promise.allSettled(interrupted.map(task=>execute(task)));
 }
 
@@ -65,6 +72,7 @@ async function openCsdnLogin(){
 
 async function syncHistory(request:Omit<PendingHistory,'expiresAt'>){
   const auth=await checkCsdnAuth();
+  if(!auth.ok)throw new Error(auth.message||'CSDN 登录状态检测失败');
   if(!auth.loggedIn){
     await chrome.storage.session.set({pendingHistory:{...request,expiresAt:Date.now()+10*60*1000}});
     await openCsdnLogin();
@@ -81,6 +89,7 @@ async function resumePendingHistory(){
     return{ok:true,resumed:false};
   }
   const auth=await checkCsdnAuth();
+  if(!auth.ok)throw new Error(auth.message||'CSDN 登录状态检测失败');
   if(!auth.loggedIn)return{ok:true,resumed:false,needsLogin:true};
   await chrome.storage.session.remove('pendingHistory');
   const article=await fetchJuejinDraftByArticleId(pendingHistory.articleId,pendingHistory.uuid,pendingHistory.title);
@@ -102,7 +111,7 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
       if(stagedArticle?.article&&stagedArticle.expiresAt>Date.now()&&sameTab){
         await chrome.storage.session.remove('stagedArticle');
         const article=stagedArticle.article as Article;
-        reply({ok:true,task:await create({...article,sourceUrl:message.sourceUrl||article.sourceUrl})});
+        reply({ok:true,task:await create(withPublishedArticleId(article,String(message.sourceUrl||article.sourceUrl)))});
       }else reply({ok:false,message:'没有待确认文章'});
     }else if(message.type==='CHECK_CSDN_STATUS'){
       reply(await checkCsdnAuth());
