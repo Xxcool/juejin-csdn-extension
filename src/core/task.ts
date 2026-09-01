@@ -15,6 +15,10 @@ export function isUncertainCreateTask(task:SyncTask){
   return task.status==='writing'&&!task.csdnArticleId;
 }
 
+export function isActiveTask(task:SyncTask){return['queued','checking-login','transforming','writing'].includes(task.status);}
+export function isRetryableTask(task:SyncTask){return['failed','needs-user'].includes(task.status);}
+export function canDeleteTask(task:SyncTask){return!isActiveTask(task);}
+
 export function withPublishedArticleId(article:SyncTask['article'],sourceUrl:string){
   const articleId=sourceUrl.match(/\/post\/(\d+)/)?.[1];
   return{...article,id:articleId||article.id,sourceUrl:sourceUrl||article.sourceUrl};

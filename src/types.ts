@@ -1,12 +1,15 @@
 export type PlatformId='csdn';
 export type Article={id:string;title:string;markdown:string;summary?:string;cover?:string;tags:string[];sourceUrl:string};
-export type TaskStatus='queued'|'checking-login'|'transforming'|'writing'|'saved'|'failed'|'needs-user';
+export type TaskStatus='queued'|'checking-login'|'transforming'|'writing'|'saved'|'failed'|'needs-user'|'needs-confirmation';
 export type TaskProgress={current:number;total:number;message:string};
 export type TaskStage='validation'|'authentication'|'content'|'images'|'draft'|'recovery';
 export type TaskErrorCategory='login'|'network'|'rate-limit'|'platform-change'|'content'|'interrupted'|'unknown';
 export type TaskDiagnostic={stage:TaskStage;category:TaskErrorCategory;message:string;suggestion:string;occurredAt:string};
 export type TaskStats={imageTotal:number;imageSucceeded:number;imageFailed:number;durationMs:number};
 export type SyncTask={id:string;article:Article;platform:PlatformId;status:TaskStatus;createdAt:string;updatedAt:string;draftUrl?:string;csdnArticleId?:string;error?:string;diagnostic?:TaskDiagnostic;warnings?:string[];progress?:TaskProgress;stats?:TaskStats;attempts:number};
+export type CsdnDraftMapping={articleId:string;csdnArticleId:string;draftUrl?:string;updatedAt:string};
 export type PlatformState={id:PlatformId;name:string;loggedIn:'unknown'|'yes'|'no'};
-export type ExtensionSettings={autoSyncAfterPublish:boolean};
+export type CategoryMapping={sourceTag:string;targetCategory:string};
+export type ImageFailurePolicy='continue'|'abort';
+export type ExtensionSettings={autoSyncAfterPublish:boolean;defaultCsdnCategory:string;categoryMappings:CategoryMapping[];syncCover:boolean;imageFailurePolicy:ImageFailurePolicy;confirmDraftUpdate:boolean};
 export const uid=()=>crypto.randomUUID();

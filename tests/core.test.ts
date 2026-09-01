@@ -1,12 +1,13 @@
 // 核心同步逻辑回归测试：覆盖任务去重、异步重试、并发上限和 CSDN 请求契约。
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {mapConcurrent,retry} from '../src/core/async';
-import {uniqueTasks} from '../src/core/store';
-import {extractCsdnArticleId,isInterruptedTask,isUncertainCreateTask,withPublishedArticleId} from '../src/core/task';
+import {deleteTask,getDraftMapping,uniqueTasks} from '../src/core/store';
+import {canDeleteTask,extractCsdnArticleId,isActiveTask,isInterruptedTask,isRetryableTask,isUncertainCreateTask,withPublishedArticleId} from '../src/core/task';
 import {classifySyncError} from '../src/core/diagnostic';
 import {isSupportedMessage} from '../src/core/message';
+import {defaultSettings,formatCategoryMappings,normalizeSettings,parseCategoryMappings,resolveCsdnCategories,shouldConfirmDraftUpdate} from '../src/core/settings';
 import {fetchJuejinDraftByArticleId} from '../src/source/juejin-api';
-import {applyImageTransfers,buildSaveArticleBody,checkCsdnAuth,collectExternalImages,imageExtension,normalizeMarkdown,summarizeImageTransfers} from '../src/targets/csdn-api';
+import {applyImageTransfers,buildSaveArticleBody,checkCsdnAuth,collectExternalImages,enforceImageFailurePolicy,imageExtension,normalizeMarkdown,summarizeImageTransfers} from '../src/targets/csdn-api';
 import type {Article,SyncTask} from '../src/types';
 
 const article:Article={id:'juejin-1',title:'测试文章',markdown:'正文内容足够长，用于测试同步请求。',tags:['TypeScript'],sourceUrl:'https://juejin.cn/post/1'};
@@ -55,6 +56,42 @@ describe('任务历史',()=>{
     expect(withPublishedArticleId(article,'https://juejin.cn/post/123456?from=editor')).toMatchObject({id:'123456',sourceUrl:'https://juejin.cn/post/123456?from=editor'});
     expect(withPublishedArticleId(article,'https://juejin.cn/editor/drafts/9')).toMatchObject({id:'juejin-1'});
   });
+
+  it('识别活动、可重试和可删除任务',()=>{
+    const base:SyncTask={id:'task',article,platform:'csdn',status:'queued',createdAt:'2026-09-01T00:00:00Z',updatedAt:'2026-09-01T00:00:00Z',attempts:0};
+    expect(isActiveTask(base)).toBe(true);
+    expect(canDeleteTask(base)).toBe(false);
+    expect(isRetryableTask({...base,status:'failed'})).toBe(true);
+    expect(canDeleteTask({...base,status:'needs-confirmation'})).toBe(true);
+  });
+
+  it('删除历史记录时独立保留草稿映射',async()=>{
+    const task:SyncTask={id:'saved',article,platform:'csdn',status:'saved',createdAt:'2026-09-01T00:00:00Z',updatedAt:'2026-09-01T00:00:00Z',attempts:1,csdnArticleId:'123',draftUrl:'https://editor.csdn.net/md/?articleId=123'};
+    const storage:Record<string,unknown>={syncTasks:[task]};
+    vi.stubGlobal('chrome',{storage:{local:{get:vi.fn(async(key:string)=>({[key]:storage[key]})),set:vi.fn(async(value:Record<string,unknown>)=>Object.assign(storage,value))}}});
+    await deleteTask(task.id);
+    expect(storage.syncTasks).toEqual([]);
+    await expect(getDraftMapping(article.id)).resolves.toMatchObject({csdnArticleId:'123',draftUrl:task.draftUrl});
+  });
+});
+
+describe('同步设置',()=>{
+  it('为旧设置补齐 0.4 默认值',()=>{
+    expect(normalizeSettings({autoSyncAfterPublish:false})).toEqual({...defaultSettings,autoSyncAfterPublish:false});
+  });
+
+  it('解析分类映射并按标签匹配、去重',()=>{
+    const mappings=parseCategoryMappings('JavaScript = 前端\nTypeScript=前端\n后端 = 后端\n无效行');
+    expect(formatCategoryMappings(mappings)).toBe('JavaScript = 前端\nTypeScript = 前端\n后端 = 后端');
+    expect(resolveCsdnCategories(['typescript','后端'],{...defaultSettings,defaultCsdnCategory:'其他',categoryMappings:mappings})).toEqual(['前端','后端']);
+    expect(resolveCsdnCategories(['产品'],{...defaultSettings,defaultCsdnCategory:'其他',categoryMappings:mappings})).toEqual(['其他']);
+  });
+
+  it('仅在开启设置且已有草稿标识时等待确认',()=>{
+    expect(shouldConfirmDraftUpdate({...defaultSettings,confirmDraftUpdate:true},'123')).toBe(true);
+    expect(shouldConfirmDraftUpdate({...defaultSettings,confirmDraftUpdate:true})).toBe(false);
+    expect(shouldConfirmDraftUpdate(defaultSettings,'123')).toBe(false);
+  });
 });
 
 describe('后台消息与失败诊断',()=>{
@@ -96,6 +133,7 @@ describe('CSDN 内容与保存契约',()=>{
     const prepared={markdown:'markdown',html:'<p>markdown</p>'};
     expect(buildSaveArticleBody(article,prepared)).toMatchObject({is_new:1});
     expect(buildSaveArticleBody(article,prepared,'123')).toMatchObject({id:'123',is_new:0});
+    expect(buildSaveArticleBody(article,prepared,undefined,['前端','前端','后端'])).toMatchObject({categories:'前端,后端'});
   });
 
   it('转存部分失败时保留正文原图并忽略失败封面',()=>{
@@ -114,6 +152,8 @@ describe('CSDN 内容与保存契约',()=>{
       {src:'a',target:'uploaded-a'},
       {src:'b',error:'403'}
     ])).toEqual({imageTotal:2,imageSucceeded:1,imageFailed:1});
+    expect(()=>enforceImageFailurePolicy([{src:'b',error:'403'}],'abort')).toThrow('已按设置终止同步');
+    expect(()=>enforceImageFailurePolicy([{src:'b',error:'403'}],'continue')).not.toThrow();
   });
 });
 

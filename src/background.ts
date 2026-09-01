@@ -1,8 +1,9 @@
 // 扩展后台协调器：管理登录状态、同步任务和 CSDN 草稿写入。
-import {allTasks,getSettings,patchTask,putTask,saveSettings,saveTasks} from './core/store';
-import {extractCsdnArticleId,isInterruptedTask,isUncertainCreateTask,withPublishedArticleId} from './core/task';
+import {allTasks,deleteTask,getDraftMapping,getSettings,patchTask,preserveTaskMappings,putTask,saveDraftMapping,saveSettings,saveTasks} from './core/store';
+import {canDeleteTask,extractCsdnArticleId,isActiveTask,isInterruptedTask,isRetryableTask,isUncertainCreateTask,withPublishedArticleId} from './core/task';
 import {classifySyncError} from './core/diagnostic';
 import {isSupportedMessage} from './core/message';
+import {resolveCsdnCategories,shouldConfirmDraftUpdate} from './core/settings';
 import {fetchJuejinDraftByArticleId} from './source/juejin-api';
 import {csdnAdapter} from './targets/csdn';
 import {checkCsdnAuth,saveDraftViaApi} from './targets/csdn-api';
@@ -17,17 +18,22 @@ async function execute(task:SyncTask){
   const startedAt=Date.now();
   let stage:TaskStage='authentication';
   try{
+    const settings=await getSettings();
     await patchTask(task.id,{status:'checking-login',attempts:task.attempts+1,error:undefined,diagnostic:undefined,warnings:undefined,stats:undefined,progress:{current:0,total:0,message:'正在检查 CSDN 登录状态'}});
     const article=csdnAdapter.transform(task.article);
     await patchTask(task.id,{status:'transforming',progress:{current:0,total:0,message:'正在处理文章内容'}});
     stage='authentication';
     const result=await saveDraftViaApi(article,{
       articleId:task.csdnArticleId,
+      categories:resolveCsdnCategories(article.tags,settings),
+      syncCover:settings.syncCover,
+      imageFailurePolicy:settings.imageFailurePolicy,
       onPreparing:()=>{stage='content';},
       onProgress:async progress=>{stage='images';await patchTask(task.id,{status:'transforming',progress});},
       onSaving:async()=>{stage='draft';await patchTask(task.id,{status:'writing',progress:{current:1,total:1,message:task.csdnArticleId?'正在更新 CSDN 草稿':'正在创建 CSDN 草稿'}});}
     });
     await patchTask(task.id,{status:'saved',draftUrl:result.draftUrl,csdnArticleId:result.articleId,warnings:result.warnings,stats:{...result.stats,durationMs:Date.now()-startedAt},progress:undefined});
+    await saveDraftMapping(task.article.id,result.articleId,result.draftUrl);
     await chrome.action.setBadgeBackgroundColor({color:'#1d6744'});
     await chrome.action.setBadgeText({text:'✓'});
     setTimeout(()=>chrome.action.setBadgeText({text:''}),5000);
@@ -44,13 +50,19 @@ async function create(article:Article){
   if(article.title.trim().length<2||article.markdown.trim().length<20)throw new Error('文章标题或正文不完整');
   const tasks=await allTasks();
   const previous=tasks.find(item=>item.article.id===article.id&&item.platform==='csdn');
-  const active=previous&&['queued','checking-login','transforming','writing'].includes(previous.status)?previous:undefined;
+  const active=previous&&isActiveTask(previous)?previous:undefined;
   if(active)return active;
+  const settings=await getSettings();
   const now=new Date().toISOString();
+  const mapping=previous?undefined:await getDraftMapping(article.id);
+  const csdnArticleId=previous?.csdnArticleId||extractCsdnArticleId(previous?.draftUrl)||mapping?.csdnArticleId;
+  const draftUrl=previous?.draftUrl||mapping?.draftUrl;
+  const needsConfirmation=shouldConfirmDraftUpdate(settings,csdnArticleId);
   const task:SyncTask=previous
-    ?{...previous,article,status:'queued',updatedAt:now,csdnArticleId:previous.csdnArticleId||extractCsdnArticleId(previous.draftUrl),error:undefined,diagnostic:undefined,warnings:undefined,stats:undefined,progress:undefined}
-    :{id:uid(),article,platform:'csdn',status:'queued',createdAt:now,updatedAt:now,attempts:0};
+    ?{...previous,article,status:needsConfirmation?'needs-confirmation':'queued',updatedAt:now,csdnArticleId,error:undefined,diagnostic:undefined,warnings:undefined,stats:undefined,progress:undefined}
+    :{id:uid(),article,platform:'csdn',status:needsConfirmation?'needs-confirmation':'queued',createdAt:now,updatedAt:now,attempts:0,csdnArticleId,draftUrl};
   await putTask(task);
+  if(needsConfirmation)return task;
   await execute(task);
   return(await allTasks()).find(item=>item.id===task.id)||task;
 }
@@ -140,7 +152,23 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
     }else if(message.type==='RETRY_TASK'){
       const task=(await allTasks()).find(item=>item.id===message.id);
       if(task){void execute(task).catch(()=>{});reply({ok:true});}else reply({ok:false,message:'任务不存在'});
+    }else if(message.type==='CONFIRM_TASK_UPDATE'){
+      const task=(await allTasks()).find(item=>item.id===message.id);
+      if(!task){reply({ok:false,message:'任务不存在'});}
+      else if(task.status!=='needs-confirmation'){reply({ok:false,message:'任务不需要确认'});}
+      else{void execute(task).catch(()=>{});reply({ok:true});}
+    }else if(message.type==='RETRY_FAILED_TASKS'){
+      const tasks=(await allTasks()).filter(isRetryableTask);
+      tasks.forEach(task=>void execute(task).catch(()=>{}));
+      reply({ok:true,count:tasks.length});
+    }else if(message.type==='DELETE_TASK'){
+      const task=(await allTasks()).find(item=>item.id===message.id);
+      if(!task){reply({ok:false,message:'任务不存在'});}
+      else if(runningTasks.has(task.id)||!canDeleteTask(task)){reply({ok:false,message:'进行中的任务不能删除'});}
+      else{await deleteTask(task.id);reply({ok:true});}
     }else if(message.type==='CLEAR_TASKS'){
+      const tasks=await allTasks();
+      await preserveTaskMappings(tasks);
       await saveTasks([]);
       reply({ok:true});
     }

@@ -1,7 +1,8 @@
-import type {ExtensionSettings,SyncTask} from '../types';
+import type {CsdnDraftMapping,ExtensionSettings,SyncTask} from '../types';
+import {defaultSettings,normalizeSettings} from './settings';
 const KEY='syncTasks';
 const SETTINGS_KEY='settings';
-export const defaultSettings:ExtensionSettings={autoSyncAfterPublish:true};
+const MAPPING_PREFIX='csdnDraftMapping:';
 
 /** 同一平台的同一篇文章只展示和保留最近一次同步状态。 */
 export function uniqueTasks(tasks:SyncTask[]){
@@ -18,7 +19,20 @@ export function uniqueTasks(tasks:SyncTask[]){
 
 export async function allTasks(){return uniqueTasks(((await chrome.storage.local.get(KEY))[KEY]||[]) as SyncTask[]);}
 export async function saveTasks(tasks:SyncTask[]){await chrome.storage.local.set({[KEY]:tasks.slice(0,200)});}
+export async function saveDraftMapping(articleId:string,csdnArticleId:string,draftUrl?:string){
+  await chrome.storage.local.set({[MAPPING_PREFIX+articleId]:{articleId,csdnArticleId,draftUrl,updatedAt:new Date().toISOString()}});
+}
+export async function getDraftMapping(articleId:string){return(await chrome.storage.local.get(MAPPING_PREFIX+articleId))[MAPPING_PREFIX+articleId] as CsdnDraftMapping|undefined;}
+export async function preserveTaskMappings(tasks:SyncTask[]){
+  for(const task of tasks)if(task.csdnArticleId)await saveDraftMapping(task.article.id,task.csdnArticleId,task.draftUrl);
+}
+export async function deleteTask(id:string){
+  const tasks=await allTasks();
+  const task=tasks.find(item=>item.id===id);
+  if(task?.csdnArticleId)await saveDraftMapping(task.article.id,task.csdnArticleId,task.draftUrl);
+  await saveTasks(tasks.filter(item=>item.id!==id));
+}
 export async function putTask(task:SyncTask){const tasks=await allTasks();const i=tasks.findIndex(x=>x.id===task.id);if(i>=0)tasks[i]=task;else tasks.unshift(task);await saveTasks(tasks);}
 export async function patchTask(id:string,patch:Partial<SyncTask>){const tasks=await allTasks();const task=tasks.find(x=>x.id===id);if(!task)return;Object.assign(task,patch,{updatedAt:new Date().toISOString()});await saveTasks(tasks);return task;}
-export async function getSettings(){return {...defaultSettings,...((await chrome.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY]||{})} as ExtensionSettings;}
-export async function saveSettings(settings:ExtensionSettings){await chrome.storage.local.set({[SETTINGS_KEY]:settings});}
+export async function getSettings(){return normalizeSettings({...defaultSettings,...((await chrome.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY]||{})});}
+export async function saveSettings(settings:ExtensionSettings){await chrome.storage.local.set({[SETTINGS_KEY]:normalizeSettings(settings)});}

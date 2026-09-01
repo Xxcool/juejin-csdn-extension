@@ -1,16 +1,20 @@
 // 插件弹窗交互：管理页面导航、平台登录状态、同步历史和设置。
-import type {SyncTask,TaskStatus} from './types';
+import type {ExtensionSettings,SyncTask,TaskStatus} from './types';
 import {categoryLabels,stageLabels} from './core/diagnostic';
+import {defaultSettings,formatCategoryMappings,normalizeSettings,parseCategoryMappings} from './core/settings';
 
 const $=<T extends HTMLElement>(selector:string)=>document.querySelector<T>(selector)!;
 const pages=['home','platform','history','settings'];
 let loginStatus:'checking'|'logged-in'|'logged-out'|'error'='checking';
 let checkSequence=0;
+let historyFilter:'all'|'saved'|'failed'|'working'='all';
+let currentSettings:ExtensionSettings=defaultSettings;
 
 const labels:Record<TaskStatus,string>={
   saved:'同步成功',
   failed:'同步失败',
   'needs-user':'等待登录',
+  'needs-confirmation':'等待确认',
   queued:'等待同步',
   'checking-login':'检查登录',
   transforming:'处理内容',
@@ -85,6 +89,7 @@ function formatDuration(durationMs:number){
 function statusKind(task:SyncTask){
   if(task.status==='saved')return task.warnings?.length?'warning':'success';
   if(task.status==='failed'||task.status==='needs-user')return'failure';
+  if(task.status==='needs-confirmation')return'warning';
   return'working';
 }
 
@@ -92,9 +97,12 @@ function taskCard(task:SyncTask){
   const kind=statusKind(task);
   const stateLabel=task.status==='saved'&&task.warnings?.length?'同步成功，有警告':labels[task.status];
   const cover=task.article.cover?`<img src="${escapeHtml(task.article.cover)}" alt="">`:'';
-  const action=task.draftUrl
-    ?`<button class="history-action" data-open="${escapeHtml(task.draftUrl)}">查看草稿 <span>↗</span></button>`
-    :(['failed','needs-user'].includes(task.status)?`<button class="history-action retry" data-retry="${escapeHtml(task.id)}">重新同步</button>`:'');
+  const actions=[];
+  if(task.draftUrl)actions.push(`<button class="history-action" data-open="${escapeHtml(task.draftUrl)}">草稿 ↗</button>`);
+  if(task.status==='needs-confirmation')actions.push(`<button class="history-action confirm" data-confirm="${escapeHtml(task.id)}">确认更新</button>`);
+  if(['failed','needs-user'].includes(task.status))actions.push(`<button class="history-action retry" data-retry="${escapeHtml(task.id)}">重试</button>`);
+  if(!['queued','checking-login','transforming','writing'].includes(task.status))actions.push(`<button class="history-action delete" data-delete="${escapeHtml(task.id)}" aria-label="删除本地记录">删除</button>`);
+  const action=`<span class="history-actions">${actions.join('')}</span>`;
   const error=task.error?`<p class="platform-error">${escapeHtml(task.error)}</p>`:'';
   const diagnostic=task.diagnostic?`<div class="task-diagnostic"><b>${categoryLabels[task.diagnostic.category]} · ${stageLabels[task.diagnostic.stage]}</b><span>${escapeHtml(task.diagnostic.suggestion)}</span></div>`:'';
   const warning=task.warnings?.length?`<p class="platform-warning" title="${escapeHtml(task.warnings.join('\n'))}">${escapeHtml(task.warnings.join('；'))}</p>`:'';
@@ -118,14 +126,16 @@ function taskCard(task:SyncTask){
 async function loadTasks(){
   try{
     const result=await chrome.runtime.sendMessage({type:'GET_TASKS'});
-    const tasks=((result?.tasks||[]) as SyncTask[]).sort((a,b)=>Date.parse(b.updatedAt)-Date.parse(a.updatedAt));
+    const all=((result?.tasks||[]) as SyncTask[]).sort((a,b)=>Date.parse(b.updatedAt)-Date.parse(a.updatedAt));
+    const tasks=all.filter(task=>historyFilter==='all'||(historyFilter==='saved'?task.status==='saved':historyFilter==='failed'?['failed','needs-user'].includes(task.status):['queued','checking-login','transforming','writing','needs-confirmation'].includes(task.status)));
     const list=$('#task-list');
-    $('#history-count').textContent=`最近 ${tasks.length} 条记录`;
-    $('#history-summary').textContent=tasks.length?`已有 ${tasks.length} 条同步记录`:'暂无同步记录';
+    $('#history-count').textContent=historyFilter==='all'?`最近 ${all.length} 条记录`:`筛选出 ${tasks.length} 条`;
+    $('#history-summary').textContent=all.length?`已有 ${all.length} 条同步记录`:'暂无同步记录';
     const clearButton=$<HTMLButtonElement>('#history-clear');
-    clearButton.disabled=!tasks.length;
+    clearButton.disabled=!all.length;
+    $<HTMLButtonElement>('#history-retry-all').disabled=!all.some(task=>['failed','needs-user'].includes(task.status));
     if(!tasks.length){
-      list.innerHTML='<div class="empty"><svg viewBox="0 0 48 48"><path d="M8 17h32v22H8zM8 17l5-8h22l5 8M18 25h12v5H18z"/></svg>暂无同步记录</div>';
+      list.innerHTML=`<div class="empty"><svg viewBox="0 0 48 48"><path d="M8 17h32v22H8zM8 17l5-8h22l5 8M18 25h12v5H18z"/></svg>${all.length?'当前筛选下暂无记录':'暂无同步记录'}</div>`;
       return;
     }
     list.innerHTML=tasks.map(taskCard).join('');
@@ -139,13 +149,68 @@ async function loadTasks(){
       else toast('已重新发起同步');
       setTimeout(()=>void loadTasks(),600);
     }));
+    list.querySelectorAll<HTMLButtonElement>('[data-confirm]').forEach(button=>button.addEventListener('click',async()=>{
+      button.disabled=true;
+      button.textContent='更新中…';
+      const result=await chrome.runtime.sendMessage({type:'CONFIRM_TASK_UPDATE',id:button.dataset.confirm});
+      if(!result?.ok)toast(result?.message||'确认更新失败');
+      else toast('已确认更新草稿');
+      setTimeout(()=>void loadTasks(),500);
+    }));
+    list.querySelectorAll<HTMLButtonElement>('[data-delete]').forEach(button=>button.addEventListener('click',async()=>{
+      if(!confirm('确定删除这条本地同步记录吗？此操作不会删除 CSDN 草稿。'))return;
+      const result=await chrome.runtime.sendMessage({type:'DELETE_TASK',id:button.dataset.delete});
+      if(!result?.ok)toast(result?.message||'删除失败');
+      else{toast('本地记录已删除');await loadTasks();}
+    }));
   }catch(error){toast((error as Error).message);}
+}
+
+function renderSettings(settings:ExtensionSettings){
+  $<HTMLInputElement>('#auto-sync').checked=settings.autoSyncAfterPublish;
+  $<HTMLInputElement>('#sync-cover').checked=settings.syncCover;
+  $<HTMLInputElement>('#confirm-update').checked=settings.confirmDraftUpdate;
+  $<HTMLSelectElement>('#image-failure').value=settings.imageFailurePolicy;
+  $<HTMLInputElement>('#default-category').value=settings.defaultCsdnCategory;
+  $<HTMLTextAreaElement>('#category-mappings').value=formatCategoryMappings(settings.categoryMappings);
+}
+
+async function saveSettingsFromForm(){
+  currentSettings=normalizeSettings({
+    autoSyncAfterPublish:$<HTMLInputElement>('#auto-sync').checked,
+    syncCover:$<HTMLInputElement>('#sync-cover').checked,
+    confirmDraftUpdate:$<HTMLInputElement>('#confirm-update').checked,
+    imageFailurePolicy:$<HTMLSelectElement>('#image-failure').value,
+    defaultCsdnCategory:$<HTMLInputElement>('#default-category').value,
+    categoryMappings:parseCategoryMappings($<HTMLTextAreaElement>('#category-mappings').value)
+  });
+  const result=await chrome.runtime.sendMessage({type:'SAVE_SETTINGS',settings:currentSettings});
+  if(!result?.ok){toast(result?.message||'设置保存失败');return;}
+  renderSettings(currentSettings);
+  toast('设置已保存');
+}
+
+async function loadSettings(){
+  const result=await chrome.runtime.sendMessage({type:'GET_SETTINGS'});
+  currentSettings=normalizeSettings(result?.settings);
+  renderSettings(currentSettings);
 }
 
 document.querySelectorAll<HTMLElement>('[data-page]').forEach(button=>button.addEventListener('click',()=>show(button.dataset.page!)));
 $('#back').addEventListener('click',()=>show('home'));
 $('#platform-refresh').addEventListener('click',()=>void checkLogin());
 $('#login-state').addEventListener('click',()=>loginStatus==='error'?void checkLogin():loginStatus==='logged-out'?void chrome.runtime.sendMessage({type:'OPEN_CSDN_LOGIN'}):undefined);
+document.querySelectorAll<HTMLButtonElement>('[data-filter]').forEach(button=>button.addEventListener('click',()=>{
+  historyFilter=button.dataset.filter as typeof historyFilter;
+  document.querySelectorAll('[data-filter]').forEach(item=>item.classList.toggle('active',item===button));
+  void loadTasks();
+}));
+$<HTMLButtonElement>('#history-retry-all').addEventListener('click',async()=>{
+  const result=await chrome.runtime.sendMessage({type:'RETRY_FAILED_TASKS'});
+  if(!result?.ok){toast(result?.message||'批量重试失败');return;}
+  toast(result.count?`已重试 ${result.count} 个失败任务`:'没有可重试任务');
+  setTimeout(()=>void loadTasks(),500);
+});
 $<HTMLButtonElement>('#history-clear').addEventListener('click',async()=>{
   if(!confirm('确定清空全部同步历史吗？此操作不会删除 CSDN 草稿。'))return;
   const result=await chrome.runtime.sendMessage({type:'CLEAR_TASKS'});
@@ -153,14 +218,11 @@ $<HTMLButtonElement>('#history-clear').addEventListener('click',async()=>{
   toast('同步历史已清空');
   await loadTasks();
 });
-const autoSync=$<HTMLInputElement>('#auto-sync');
-autoSync.addEventListener('change',async()=>{
-  await chrome.runtime.sendMessage({type:'SAVE_SETTINGS',settings:{autoSyncAfterPublish:autoSync.checked}});
-  toast('设置已保存');
-});
-chrome.runtime.sendMessage({type:'GET_SETTINGS'}).then(result=>autoSync.checked=result?.settings?.autoSyncAfterPublish!==false);
+['#auto-sync','#sync-cover','#confirm-update','#image-failure'].forEach(selector=>$(selector).addEventListener('change',()=>void saveSettingsFromForm()));
+['#default-category','#category-mappings'].forEach(selector=>$(selector).addEventListener('change',()=>void saveSettingsFromForm()));
 chrome.storage.onChanged.addListener((changes,area)=>{
   if(area==='local'&&changes.syncTasks&&$('#history').classList.contains('active'))void loadTasks();
 });
 void loadTasks();
+void loadSettings();
 void checkLogin();

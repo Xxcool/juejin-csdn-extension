@@ -15,6 +15,22 @@
   </nav>
 </section>
 <section id="platform" class="page"><div class="content-actions"><span>已接入 1 个平台</span><button id="platform-refresh">↻ 刷新状态</button></div><div class="platform-card"><div class="platform-row"><div class="csdn-logo">C</div><div class="platform-copy"><b>CSDN</b><small>文章将保存为草稿，不会公开发布</small></div><div id="login-state" class="checking">检测中…</div></div><p class="tip">同步入口位于掘金编辑器的发布面板中。</p></div></section>
-<section id="history" class="page history-page"><div class="history-meta"><span id="history-count">最近 0 条记录</span><button id="history-clear" disabled>清空</button></div><div id="task-list" class="task-list"></div></section>
-<section id="settings" class="page"><label class="setting"><span><b>发布后自动同步</b><small>发布弹窗中的 CSDN 同步选项默认勾选</small></span><input id="auto-sync" type="checkbox"><i></i></label><div class="notice"><b>安全边界</b><p>插件只读取 CSDN 的登录标识以判断登录状态，不读取密码，不保存或上传 Cookie。文章内容只在当前 Chrome 与 CSDN 之间流转。</p></div></section>
+<section id="history" class="page history-page">
+  <div class="history-meta"><span id="history-count">最近 0 条记录</span><span class="history-meta-actions"><button id="history-retry-all" disabled>重试失败</button><button id="history-clear" disabled>清空</button></span></div>
+  <div class="history-filters" role="group" aria-label="筛选同步记录"><button class="active" data-filter="all">全部</button><button data-filter="saved">成功</button><button data-filter="failed">失败</button><button data-filter="working">进行中</button></div>
+  <div id="task-list" class="task-list"></div>
+</section>
+<section id="settings" class="page settings-page">
+  <div class="settings-group"><small class="settings-kicker">同步行为</small>
+    <label class="setting"><span><b>发布后自动同步</b><small>发布面板中的 CSDN 选项默认勾选</small></span><input id="auto-sync" type="checkbox"><i></i></label>
+    <label class="setting"><span><b>同步文章封面</b><small>关闭后仅同步正文中的图片</small></span><input id="sync-cover" type="checkbox"><i></i></label>
+    <label class="setting"><span><b>更新草稿前确认</b><small>已有 CSDN 草稿时在历史记录中等待确认</small></span><input id="confirm-update" type="checkbox"><i></i></label>
+    <label class="field"><span>图片失败策略</span><select id="image-failure"><option value="continue">保留原链接并继续</option><option value="abort">终止本次同步</option></select></label>
+  </div>
+  <div class="settings-group"><small class="settings-kicker">分类映射</small>
+    <label class="field"><span>默认 CSDN 分类</span><input id="default-category" maxlength="40" placeholder="例如：前端"></label>
+    <label class="field mapping-field"><span>掘金标签映射</span><textarea id="category-mappings" rows="3" placeholder="JavaScript = 前端&#10;后端 = 后端"></textarea><small>每行一条“掘金标签 = CSDN 分类”；命中映射时优先使用映射结果。</small></label>
+  </div>
+  <div class="notice"><b>安全边界</b><p>设置和同步记录只保存在当前 Chrome。清除记录不会删除 CSDN 草稿。</p></div>
+</section>
 <div id="toast" role="status"></div></main><script type="module" src="popup.js"></script></body></html>

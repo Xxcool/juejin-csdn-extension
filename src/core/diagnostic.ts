@@ -26,7 +26,7 @@ export function classifySyncError(error:unknown,stage:TaskStage):TaskDiagnostic{
   else if(/429|限流|频繁|too many/i.test(message))category='rate-limit';
   else if(/签名|鉴权异常|invalid signature|返回错误码|没有返回草稿标识|接口.*(?:变化|异常)|\((?:400|403|404)\)/i.test(message))category='platform-change';
   else if(/timeout|超时|failed to fetch|network|网络|连接/i.test(message))category='network';
-  else if(/标题|正文不完整|非图片内容|图片地址/i.test(message))category='content';
+  else if(/标题|正文不完整|非图片内容|图片地址|图片.*失败/i.test(message))category='content';
   else if(/中断|无法确认是否已保存/i.test(message))category='interrupted';
   return{stage,category,message,suggestion:suggestions[category],occurredAt:new Date().toISOString()};
 }

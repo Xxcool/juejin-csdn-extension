@@ -13,7 +13,11 @@ nav .nav-copy{display:grid;flex:1;gap:2px}
 .history-meta>span{letter-spacing:.01em}
 .history-meta button{padding:5px 0;color:#ff4d5e;transition:opacity .15s}
 .history-meta button:disabled{opacity:.3;cursor:default}
-.task-list{height:406px;display:flex;flex-direction:column;align-items:stretch;overflow-x:hidden;overflow-y:scroll;scrollbar-gutter:stable;padding:10px 8px 20px 14px;gap:8px}
+.history-meta-actions{display:flex;gap:12px}.history-meta-actions button:first-child{color:#1d7dfa}
+.history-filters{height:38px;display:flex;align-items:center;gap:5px;padding:0 14px;border-bottom:1px solid #f0f2f5;background:#fff}
+.history-filters button{border:0;border-radius:999px;background:transparent;color:#8c95a5;padding:4px 10px;font-size:10px;cursor:pointer;transition:background .15s,color .15s}
+.history-filters button:hover{background:#f3f6fa;color:#536075}.history-filters button.active{background:#eaf3ff;color:#176fd9;font-weight:600}
+.task-list{height:368px;display:flex;flex-direction:column;align-items:stretch;overflow-x:hidden;overflow-y:scroll;scrollbar-gutter:stable;padding:10px 8px 20px 14px;gap:8px}
 .task-list::-webkit-scrollbar{width:6px}
 .task-list::-webkit-scrollbar-track{background:transparent}
 .task-list::-webkit-scrollbar-thumb{border-radius:999px;background:#d8dee8}
@@ -39,7 +43,7 @@ nav .nav-copy{display:grid;flex:1;gap:2px}
 .history-chevron{position:relative;width:14px;height:14px;color:#bdc5d1}
 .history-chevron:before{content:"";position:absolute;left:4px;top:5px;width:5px;height:5px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);transition:transform .18s,top .18s}
 .history-card[open] .history-chevron:before{top:7px;transform:rotate(225deg)}
-.platform-result{display:grid;grid-template-columns:15px minmax(0,1fr) auto auto;align-items:center;gap:7px;min-height:39px;padding:7px 10px;border-top:1px solid #edf0f4;background:#fafbfd}
+.platform-result{display:grid;grid-template-columns:15px minmax(0,1fr) auto;align-items:center;gap:7px;min-height:39px;padding:7px 10px;border-top:1px solid #edf0f4;background:#fafbfd}
 .result-icon{display:grid;place-items:center;width:13px;height:13px;border:1.5px solid currentColor;border-radius:50%;font-size:9px;font-weight:700;line-height:1}
 .platform-result.success .result-icon{color:#13b76a}
 .platform-result.failure .result-icon{color:#ff5364}
@@ -52,7 +56,14 @@ nav .nav-copy{display:grid;flex:1;gap:2px}
 .task-diagnostic{display:grid;grid-column:1/-1;gap:2px;margin-top:3px;padding:6px 7px;border-radius:6px;background:#fff2f3;color:#a93e49;font-size:9px;line-height:13px}.task-diagnostic b{font-size:9px}.task-diagnostic span{color:#796469}
 .platform-warning{max-width:170px;margin:0;overflow:hidden;color:#b87512;font-size:9px;line-height:13px;text-overflow:ellipsis;white-space:nowrap}
 .platform-state{color:#8b95a5;font-size:9px;white-space:nowrap}
+.history-actions{grid-column:2/-1;display:flex;justify-content:flex-end;gap:9px;padding-top:2px}
 .history-action{border:0;background:transparent;color:#1d7dfa;font-size:10px;white-space:nowrap;cursor:pointer}
 .history-action:hover{text-decoration:underline}
 .history-action.retry{color:#ff5364}
+.history-action.confirm{color:#c97808}.history-action.delete{color:#9ba3b0}
 .history-action:disabled{opacity:.5;cursor:wait;text-decoration:none}
+/* 设置页延续克制的工具面板风格，用细分组和短标签承载更多策略而不增加视觉噪音。 */
+.settings-page{padding:14px 16px 22px;overflow-y:auto;background:#fbfcfe}.settings-page::-webkit-scrollbar{width:5px}.settings-page::-webkit-scrollbar-thumb{border-radius:999px;background:#d8dee8}
+.settings-group{display:grid;gap:8px;margin-bottom:13px}.settings-kicker{padding-left:2px;color:#8d97a7;font-size:9px;font-weight:600;letter-spacing:.12em;text-transform:uppercase}
+.settings-page .setting{padding:11px 12px;border:1px solid #edf0f4;background:#fff;border-radius:10px}.settings-page .setting b{font-size:12px}.settings-page .setting small{font-size:9px;line-height:1.4}.settings-page .setting i{flex:0 0 36px;width:36px;height:20px}.settings-page .setting i:after{width:14px;height:14px}.settings-page .setting input:checked+i:after{left:19px}
+.field{display:grid;gap:6px;padding:10px 12px;border:1px solid #edf0f4;border-radius:10px;background:#fff}.field>span{color:#465166;font-size:11px;font-weight:600}.field input,.field select,.field textarea{width:100%;border:1px solid #e2e7ee;border-radius:7px;background:#f9fafc;color:#283246;padding:7px 8px;font:10px "PingFang SC","Microsoft YaHei",sans-serif;outline:none;transition:border-color .15s,box-shadow .15s}.field input:focus,.field select:focus,.field textarea:focus{border-color:#7fb5f5;box-shadow:0 0 0 3px #1d7dfa12}.field textarea{resize:vertical;min-height:60px;line-height:1.55}.mapping-field>small{color:#98a1af;font-size:9px;line-height:1.5}.settings-page .notice{margin-top:2px;background:#fff}
