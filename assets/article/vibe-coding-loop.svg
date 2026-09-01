@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#071221"/>
+      <stop offset="1" stop-color="#102742"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#36c5f0"/>
+      <stop offset="1" stop-color="#2f7cf6"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#02070d" flood-opacity=".45"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0l10 5-10 5z" fill="#4f9cff"/>
+    </marker>
+  </defs>
+  <rect width="1600" height="900" rx="36" fill="url(#bg)"/>
+  <g opacity=".14" stroke="#8bbcff">
+    <path d="M0 150h1600M0 300h1600M0 450h1600M0 600h1600M0 750h1600"/>
+    <path d="M200 0v900M400 0v900M600 0v900M800 0v900M1000 0v900M1200 0v900M1400 0v900"/>
+  </g>
+  <text x="110" y="115" fill="#f4f8ff" font-size="54" font-weight="700" font-family="PingFang SC,Microsoft YaHei,sans-serif">Vibe Coding 不是一句 Prompt</text>
+  <text x="110" y="165" fill="#98abc2" font-size="25" font-family="PingFang SC,Microsoft YaHei,sans-serif">它是一条由人定义方向、AI 加速探索、真实反馈负责验收的迭代闭环</text>
+
+  <g fill="none" stroke="#4f9cff" stroke-width="5" marker-end="url(#arrow)" opacity=".9">
+    <path d="M390 325C470 250 570 230 665 260"/>
+    <path d="M925 260c105-25 210 15 275 100"/>
+    <path d="M1230 500c-20 105-90 175-190 210"/>
+    <path d="M760 720c-115 5-210-35-270-120"/>
+    <path d="M355 515c-25-75-10-135 35-190"/>
+  </g>
+
+  <g filter="url(#shadow)" font-family="PingFang SC,Microsoft YaHei,sans-serif">
+    <g transform="translate(165 270)">
+      <rect width="260" height="150" rx="28" fill="#112d49" stroke="#2f7cf6" stroke-width="2"/>
+      <circle cx="48" cy="48" r="22" fill="#163f66"/>
+      <path d="M38 48h20M48 38v20" stroke="#72d5ff" stroke-width="4" stroke-linecap="round"/>
+      <text x="82" y="57" fill="#eef6ff" font-size="30" font-weight="700">Idea</text>
+      <text x="30" y="108" fill="#a8bdd3" font-size="21">先说清痛点与边界</text>
+    </g>
+    <g transform="translate(620 205)">
+      <rect width="330" height="160" rx="28" fill="#123550" stroke="#36c5f0" stroke-width="2"/>
+      <circle cx="50" cy="51" r="23" fill="#14516c"/>
+      <path d="M39 52l8 8 16-19" fill="none" stroke="#71e4de" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="86" y="61" fill="#eefcff" font-size="30" font-weight="700">方案对话</text>
+      <text x="30" y="113" fill="#a8c7d6" font-size="21">拆状态、列风险、选最小切口</text>
+    </g>
+    <g transform="translate(1130 330)">
+      <rect width="300" height="165" rx="28" fill="#172f4f" stroke="#568ff6" stroke-width="2"/>
+      <circle cx="50" cy="50" r="23" fill="#203d65"/>
+      <path d="M37 43l-9 8 9 8M63 43l9 8-9 8M55 35L45 67" fill="none" stroke="#8ec3ff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="88" y="60" fill="#f1f6ff" font-size="30" font-weight="700">快速实现</text>
+      <text x="30" y="114" fill="#adbed5" font-size="21">完成可运行的纵向切片</text>
+    </g>
+    <g transform="translate(810 650)">
+      <rect width="340" height="155" rx="28" fill="#183743" stroke="#3bd6aa" stroke-width="2"/>
+      <circle cx="50" cy="49" r="23" fill="#1a554f"/>
+      <path d="M37 50l9 9 18-21" fill="none" stroke="#6cf0bd" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="87" y="59" fill="#effff9" font-size="30" font-weight="700">真实验证</text>
+      <text x="30" y="109" fill="#aed1c8" font-size="21">浏览器、账号、接口共同验收</text>
+    </g>
+    <g transform="translate(245 565)">
+      <rect width="335" height="165" rx="28" fill="#3a2936" stroke="#ff6f7d" stroke-width="2"/>
+      <circle cx="50" cy="50" r="23" fill="#61333f"/>
+      <path d="M38 38l24 24M62 38L38 62" stroke="#ff9aa5" stroke-width="4" stroke-linecap="round"/>
+      <text x="87" y="60" fill="#fff3f5" font-size="30" font-weight="700">失败复盘</text>
+      <text x="30" y="114" fill="#d9b7c0" font-size="21">把报错变成下一轮上下文</text>
+    </g>
+  </g>
+
+  <g transform="translate(655 405)">
+    <circle cx="145" cy="95" r="104" fill="#0b1c30" stroke="url(#accent)" stroke-width="4"/>
+    <circle cx="145" cy="95" r="72" fill="#112e4c"/>
+    <path d="M105 105c30-58 74-58 82-14 5 31-34 52-64 22-18-18-7-45 14-50 31-8 54 31 38 63" fill="none" stroke="#73d9ff" stroke-width="8" stroke-linecap="round"/>
+    <text x="145" y="228" text-anchor="middle" fill="#dcecff" font-size="25" font-weight="600" font-family="PingFang SC,Microsoft YaHei,sans-serif">人机协作上下文</text>
+  </g>
+</svg>
