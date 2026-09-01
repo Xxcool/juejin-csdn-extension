@@ -4,7 +4,7 @@ const SETTINGS_KEY='settings';
 export const defaultSettings:ExtensionSettings={autoSyncAfterPublish:true};
 
 /** 同一平台的同一篇文章只展示和保留最近一次同步状态。 */
-function uniqueTasks(tasks:SyncTask[]){
+export function uniqueTasks(tasks:SyncTask[]){
   const identities=new Set<string>();
   return[...tasks]
     .sort((a,b)=>Date.parse(b.updatedAt)-Date.parse(a.updatedAt))

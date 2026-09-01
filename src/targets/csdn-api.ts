@@ -1,6 +1,7 @@
 // CSDN 草稿 API 适配器：清洗 Markdown、转存图片，并直接保存到草稿箱。
 import {marked} from 'marked';
-import type {Article} from '../types';
+import type {Article,TaskProgress} from '../types';
+import {mapConcurrent,retry} from '../core/async';
 import type {AdapterResult} from './adapter';
 
 const API='https://bizapi.csdn.net/blog-console-api/v3/mdeditor/saveArticle';
@@ -44,7 +45,7 @@ export async function checkCsdnAuth(){
 }
 
 /** 去掉掘金导出主题元数据，并统一为 CSDN 支持的 Markdown 围栏。 */
-function normalizeMarkdown(source:string){
+export function normalizeMarkdown(source:string){
   let markdown=source.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');
   const frontmatter=markdown.match(/^---[ \t]*\n([\s\S]*?)\n---[ \t]*(?:\n|$)/);
   if(frontmatter&&/^(?:theme|highlight)\s*:/m.test(frontmatter[1]))markdown=markdown.slice(frontmatter[0].length);
@@ -53,7 +54,7 @@ function normalizeMarkdown(source:string){
   return markdown.trim();
 }
 
-function imageExtension(src:string,blob:Blob){
+export function imageExtension(src:string,blob:Blob){
   const pathExtension=src.match(/\.([a-zA-Z0-9]+)(?:[?#]|$)/)?.[1]?.toLowerCase();
   if(pathExtension&&['jpg','jpeg','png','gif','webp'].includes(pathExtension))return pathExtension;
   const mimeExtension:Record<string,string>={'image/jpeg':'jpg','image/png':'png','image/gif':'gif','image/webp':'webp'};
@@ -100,7 +101,7 @@ async function uploadImageToCsdn(src:string){
   return uploadResult.data.imageUrl;
 }
 
-function collectExternalImages(markdown:string){
+export function collectExternalImages(markdown:string){
   const urls=new Set<string>();
   const markdownImage=/!\[[^\]]*\]\(\s*(?:<([^>]+)>|([^\s)]+))/g;
   const htmlImage=/<img\b[^>]*\bsrc=["']([^"']+)["']/gi;
@@ -115,24 +116,52 @@ function collectExternalImages(markdown:string){
 }
 
 /** CSDN 无法稳定读取掘金 CDN，保存前将正文和封面图片转存到 CSDN。 */
-async function prepareArticle(article:Article){
+type SaveDraftOptions={articleId?:string;onProgress?:(progress:TaskProgress)=>void|Promise<void>;onSaving?:()=>void|Promise<void>};
+type ImageTransfer={src:string;target?:string;error?:string};
+
+export function applyImageTransfers(markdown:string,cover:string|undefined,transfers:ImageTransfer[]){
+  const replacements=new Map(transfers.filter(item=>item.target).map(item=>[item.src,item.target!]));
+  for(const [src,target] of replacements)markdown=markdown.split(src).join(target);
+  const warnings=transfers.filter(item=>item.error).map(item=>{
+    const location=cover===item.src&&!markdown.includes(item.src)?'封面':'正文图片';
+    const action=location==='封面'?'已忽略':'已保留原链接';
+    return`${location}转存失败，${action}：${item.src}（${item.error}）`;
+  });
+  return{markdown,cover:cover?replacements.get(cover):undefined,warnings};
+}
+
+async function prepareArticle(article:Article,onProgress?:SaveDraftOptions['onProgress']){
   let markdown=normalizeMarkdown(article.markdown);
   const images=collectExternalImages(markdown);
   if(article.cover&&!images.includes(article.cover))images.push(article.cover);
-  const replacements=new Map<string,string>();
-  for(const src of images)replacements.set(src,await uploadImageToCsdn(src));
-  for(const [src,target] of replacements)markdown=markdown.split(src).join(target);
-  const cover=article.cover?replacements.get(article.cover)||article.cover:undefined;
-  const html=marked.parse(markdown,{async:false,gfm:true,breaks:false}) as string;
-  return{markdown,html,cover};
+  let completed=0;
+  if(images.length)await onProgress?.({current:0,total:images.length,message:`准备转存 ${images.length} 张图片`});
+  const transfers=await mapConcurrent(images,3,async src=>{
+    let result:ImageTransfer;
+    try{result={src,target:await retry(()=>uploadImageToCsdn(src))};}
+    catch(error){result={src,error:(error as Error).message};}
+    finally{
+      completed++;
+      await onProgress?.({current:completed,total:images.length,message:`正在转存图片 ${completed}/${images.length}`});
+    }
+    return result;
+  });
+  const transferred=applyImageTransfers(markdown,article.cover,transfers);
+  const html=marked.parse(transferred.markdown,{async:false,gfm:true,breaks:false}) as string;
+  return{...transferred,html};
+}
+
+export function buildSaveArticleBody(article:Article,prepared:{markdown:string;html:string;cover?:string},articleId?:string){
+  return{title:article.title,markdowncontent:prepared.markdown+'\n',content:prepared.html+'\n',readType:'public',level:0,tags:article.tags?.join(',')||'',status:2,categories:'',type:'original',original_link:'',authorized_status:false,not_auto_saved:'1',source:'pc_mdeditor',cover_images:prepared.cover?[prepared.cover]:[],cover_type:prepared.cover?1:0,is_new:articleId?0:1,...(articleId?{id:articleId}:{}),vote_id:0,resource_id:'',pubStatus:'draft',creation_statement:0,creator_activity_id:''};
 }
 
 /** 调用 CSDN 保存草稿 API。 */
-export async function saveDraftViaApi(article:Article):Promise<AdapterResult>{
+export async function saveDraftViaApi(article:Article,options:SaveDraftOptions={}):Promise<AdapterResult>{
   const auth=await checkCsdnAuth();
   if(!auth.loggedIn)throw new Error('请先登录 CSDN');
-  const prepared=await prepareArticle(article);
-  const body={title:article.title,markdowncontent:prepared.markdown+'\n',content:prepared.html+'\n',readType:'public',level:0,tags:article.tags?.join(',')||'',status:2,categories:'',type:'original',original_link:'',authorized_status:false,not_auto_saved:'1',source:'pc_mdeditor',cover_images:prepared.cover?[prepared.cover]:[],cover_type:1,is_new:1,vote_id:0,resource_id:'',pubStatus:'draft',creation_statement:0,creator_activity_id:''};
+  const prepared=await prepareArticle(article,options.onProgress);
+  const body=buildSaveArticleBody(article,prepared,options.articleId);
+  await options.onSaving?.();
   const response=await fetch(API,{method:'POST',credentials:'include',headers:await signedHeaders('/blog-console-api/v3/mdeditor/saveArticle','POST'),body:JSON.stringify(body)});
   if(!response.ok){
     const text=await response.text().catch(()=>'');
@@ -142,6 +171,6 @@ export async function saveDraftViaApi(article:Article):Promise<AdapterResult>{
   if(result.code!==200&&result.code!==0)throw new Error(result.msg||result.message||'CSDN 返回错误码 '+result.code);
   const articleId=result.data?.id||result.data?.article_id;
   const draftUrl=result.data?.url||(articleId?'https://editor.csdn.net/md/?articleId='+articleId:'');
-  if(!draftUrl)throw new Error('CSDN 已保存草稿，但没有返回草稿地址');
-  return{draftUrl};
+  if(!draftUrl||!articleId)throw new Error('CSDN 已保存草稿，但没有返回草稿标识');
+  return{draftUrl,articleId:String(articleId),warnings:prepared.warnings};
 }

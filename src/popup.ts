@@ -75,29 +75,32 @@ function formatDate(value:string){
   return new Date(value).toLocaleString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).replaceAll('/','-');
 }
 
-function statusKind(status:TaskStatus){
-  if(status==='saved')return'success';
-  if(status==='failed'||status==='needs-user')return'failure';
+function statusKind(task:SyncTask){
+  if(task.status==='saved')return task.warnings?.length?'warning':'success';
+  if(task.status==='failed'||task.status==='needs-user')return'failure';
   return'working';
 }
 
 function taskCard(task:SyncTask){
-  const kind=statusKind(task.status);
+  const kind=statusKind(task);
+  const stateLabel=task.status==='saved'&&task.warnings?.length?'同步成功，有警告':labels[task.status];
   const cover=task.article.cover?`<img src="${escapeHtml(task.article.cover)}" alt="">`:'';
   const action=task.draftUrl
     ?`<button class="history-action" data-open="${escapeHtml(task.draftUrl)}">查看草稿 <span>↗</span></button>`
     :(['failed','needs-user'].includes(task.status)?`<button class="history-action retry" data-retry="${escapeHtml(task.id)}">重新同步</button>`:'');
   const error=task.error?`<p class="platform-error">${escapeHtml(task.error)}</p>`:'';
+  const warning=task.warnings?.length?`<p class="platform-warning" title="${escapeHtml(task.warnings.join('\n'))}">${escapeHtml(task.warnings.join('；'))}</p>`:'';
+  const progress=task.progress?`<p class="task-progress"><span style="width:${task.progress.total?Math.round(task.progress.current/task.progress.total*100):12}%"></span></p>`:'';
   return`<details class="history-card" open>
     <summary>
       <span class="history-cover">${cover}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h8l4 4V20.5H6zM14 3.5v4h4M9 12h6M9 15.5h6"/></svg></span>
-      <span class="history-copy"><b title="${escapeHtml(task.article.title)}">${escapeHtml(task.article.title)}</b><small><strong class="${kind}">1${labels[task.status]}</strong><i>·</i>${formatDate(task.updatedAt)}</small></span>
+      <span class="history-copy"><b title="${escapeHtml(task.article.title)}">${escapeHtml(task.article.title)}</b><small><strong class="${kind}">${stateLabel}</strong><i>·</i>${formatDate(task.updatedAt)}</small>${progress}</span>
       <span class="history-chevron" aria-hidden="true"></span>
     </summary>
     <div class="platform-result ${kind}">
-      <span class="result-icon" aria-hidden="true">${kind==='success'?'✓':kind==='failure'?'×':'·'}</span>
-      <span class="platform-result-copy"><b>CSDN</b>${error}</span>
-      <span class="platform-state">${labels[task.status]}</span>
+      <span class="result-icon" aria-hidden="true">${kind==='success'?'✓':kind==='failure'?'×':kind==='warning'?'!':'·'}</span>
+      <span class="platform-result-copy"><b>CSDN</b>${error}${warning}</span>
+      <span class="platform-state">${task.progress?escapeHtml(task.progress.message):stateLabel}</span>
       ${action}
     </div>
   </details>`;
@@ -147,5 +150,8 @@ autoSync.addEventListener('change',async()=>{
   toast('设置已保存');
 });
 chrome.runtime.sendMessage({type:'GET_SETTINGS'}).then(result=>autoSync.checked=result?.settings?.autoSyncAfterPublish!==false);
+chrome.storage.onChanged.addListener((changes,area)=>{
+  if(area==='local'&&changes.syncTasks&&$('#history').classList.contains('active'))void loadTasks();
+});
 void loadTasks();
 void checkLogin();

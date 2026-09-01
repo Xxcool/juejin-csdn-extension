@@ -1,29 +1,37 @@
 // 扩展后台协调器：管理登录状态、同步任务和 CSDN 草稿写入。
 import {allTasks,getSettings,patchTask,putTask,saveSettings,saveTasks} from './core/store';
+import {extractCsdnArticleId,isInterruptedTask} from './core/task';
 import {fetchJuejinDraftByArticleId} from './source/juejin-api';
 import {csdnAdapter} from './targets/csdn';
 import {checkCsdnAuth,saveDraftViaApi} from './targets/csdn-api';
 import type {Article,ExtensionSettings,SyncTask} from './types';
 import {uid} from './types';
 
+const runningTasks=new Set<string>();
+
 async function execute(task:SyncTask){
+  if(runningTasks.has(task.id))return;
+  runningTasks.add(task.id);
   try{
-    await patchTask(task.id,{status:'checking-login',attempts:task.attempts+1,error:undefined});
+    await patchTask(task.id,{status:'checking-login',attempts:task.attempts+1,error:undefined,warnings:undefined,progress:{current:0,total:0,message:'正在检查 CSDN 登录状态'}});
     const article=csdnAdapter.transform(task.article);
-    await patchTask(task.id,{status:'transforming'});
-    await patchTask(task.id,{status:'writing'});
-    const result=await saveDraftViaApi(article);
-    await patchTask(task.id,{status:'saved',draftUrl:result.draftUrl});
+    await patchTask(task.id,{status:'transforming',progress:{current:0,total:0,message:'正在处理文章内容'}});
+    const result=await saveDraftViaApi(article,{
+      articleId:task.csdnArticleId,
+      onProgress:async progress=>{await patchTask(task.id,{status:'transforming',progress});},
+      onSaving:async()=>{await patchTask(task.id,{status:'writing',progress:{current:1,total:1,message:task.csdnArticleId?'正在更新 CSDN 草稿':'正在创建 CSDN 草稿'}});}
+    });
+    await patchTask(task.id,{status:'saved',draftUrl:result.draftUrl,csdnArticleId:result.articleId,warnings:result.warnings,progress:undefined});
     await chrome.action.setBadgeBackgroundColor({color:'#1d6744'});
     await chrome.action.setBadgeText({text:'✓'});
     setTimeout(()=>chrome.action.setBadgeText({text:''}),5000);
   }catch(error){
     const message=(error as Error).message;
-    await patchTask(task.id,{status:/登录/.test(message)?'needs-user':'failed',error:message});
+    await patchTask(task.id,{status:/登录/.test(message)?'needs-user':'failed',error:message,progress:undefined});
     await chrome.action.setBadgeBackgroundColor({color:'#a24332'});
     await chrome.action.setBadgeText({text:'!'});
     throw error;
-  }
+  }finally{runningTasks.delete(task.id);}
 }
 
 async function create(article:Article){
@@ -34,12 +42,20 @@ async function create(article:Article){
   if(active)return active;
   const now=new Date().toISOString();
   const task:SyncTask=previous
-    ?{...previous,article,status:'queued',updatedAt:now,error:undefined,draftUrl:undefined}
+    ?{...previous,article,status:'queued',updatedAt:now,csdnArticleId:previous.csdnArticleId||extractCsdnArticleId(previous.draftUrl),error:undefined,warnings:undefined,progress:undefined}
     :{id:uid(),article,platform:'csdn',status:'queued',createdAt:now,updatedAt:now,attempts:0};
   await putTask(task);
   await execute(task);
   return(await allTasks()).find(item=>item.id===task.id)||task;
 }
+
+/** Service Worker 被回收或浏览器重启后，重新执行尚未结束的持久化任务。 */
+async function recoverInterruptedTasks(){
+  const interrupted=(await allTasks()).filter(isInterruptedTask);
+  await Promise.allSettled(interrupted.map(task=>execute(task)));
+}
+
+const recovery=recoverInterruptedTasks();
 
 type PendingHistory={articleId:string;title:string;sourceUrl:string;uuid:string;expiresAt:number};
 
@@ -73,6 +89,7 @@ async function resumePendingHistory(){
 
 chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   (async()=>{
+    await recovery;
     if(message.type==='STAGE_ARTICLE'){
       await chrome.storage.session.set({stagedArticle:{article:message.article,sourceTabId:sender.tab?.id,expiresAt:Date.now()+120000}});
       reply({ok:true});
