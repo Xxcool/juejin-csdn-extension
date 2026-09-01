@@ -28,9 +28,14 @@ async function execute(task:SyncTask){
 
 async function create(article:Article){
   if(article.title.trim().length<2||article.markdown.trim().length<20)throw new Error('文章标题或正文不完整');
-  const active=(await allTasks()).find(item=>item.article.id===article.id&&['queued','checking-login','transforming','writing'].includes(item.status));
+  const tasks=await allTasks();
+  const previous=tasks.find(item=>item.article.id===article.id&&item.platform==='csdn');
+  const active=previous&&['queued','checking-login','transforming','writing'].includes(previous.status)?previous:undefined;
   if(active)return active;
-  const task:SyncTask={id:uid(),article,platform:'csdn',status:'queued',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),attempts:0};
+  const now=new Date().toISOString();
+  const task:SyncTask=previous
+    ?{...previous,article,status:'queued',updatedAt:now,error:undefined,draftUrl:undefined}
+    :{id:uid(),article,platform:'csdn',status:'queued',createdAt:now,updatedAt:now,attempts:0};
   await putTask(task);
   await execute(task);
   return(await allTasks()).find(item=>item.id===task.id)||task;

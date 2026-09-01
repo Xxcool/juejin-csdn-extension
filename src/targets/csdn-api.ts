@@ -61,7 +61,10 @@ function imageExtension(src:string,blob:Blob){
 }
 
 async function uploadImageToCsdn(src:string){
-  const imageResponse=await fetch(src,{credentials:'omit'});
+  // 掘金私有 CDN 的签名链接仍需当前登录会话；其他外链图片不携带站点凭据。
+  const hostname=new URL(src).hostname;
+  const credentials:RequestCredentials=hostname.endsWith('-private.juejin.cn')?'include':'omit';
+  const imageResponse=await fetch(src,{credentials});
   if(!imageResponse.ok)throw new Error(`图片下载失败 (${imageResponse.status})：${src}`);
   const imageBlob=await imageResponse.blob();
   if(!imageBlob.type.startsWith('image/'))throw new Error(`图片地址返回了非图片内容：${src}`);

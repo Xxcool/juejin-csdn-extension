@@ -13,8 +13,12 @@ nav .nav-copy{display:grid;flex:1;gap:2px}
 .history-meta>span{letter-spacing:.01em}
 .history-meta button{padding:5px 0;color:#ff4d5e;transition:opacity .15s}
 .history-meta button:disabled{opacity:.3;cursor:default}
-.task-list{height:406px;overflow-x:hidden;padding:10px 14px 20px;gap:8px}
-.history-card{min-width:0;overflow:hidden;border:1px solid #e9edf3;border-radius:11px;background:#fff;box-shadow:0 2px 8px #20304d0a;transition:border-color .16s,box-shadow .16s}
+.task-list{height:406px;display:flex;flex-direction:column;align-items:stretch;overflow-x:hidden;overflow-y:scroll;scrollbar-gutter:stable;padding:10px 8px 20px 14px;gap:8px}
+.task-list::-webkit-scrollbar{width:6px}
+.task-list::-webkit-scrollbar-track{background:transparent}
+.task-list::-webkit-scrollbar-thumb{border-radius:999px;background:#d8dee8}
+.task-list::-webkit-scrollbar-thumb:hover{background:#bfc8d5}
+.history-card{flex:0 0 auto;min-width:0;overflow:hidden;border:1px solid #e9edf3;border-radius:11px;background:#fff;box-shadow:0 2px 8px #20304d0a;transition:border-color .16s,box-shadow .16s}
 .history-card:hover{border-color:#dce3ed;box-shadow:0 5px 14px #20304d10}
 .history-card summary{display:grid;grid-template-columns:38px minmax(0,1fr) 16px;align-items:center;gap:9px;min-height:59px;padding:8px 10px;list-style:none;cursor:pointer;user-select:none}
 .history-card summary::-webkit-details-marker{display:none}
