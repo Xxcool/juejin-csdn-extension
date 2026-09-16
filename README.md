@@ -10,15 +10,6 @@
 
 ---
 
-## 📸 界面预览 (Preview)
-
-<div align="center">
-  <img src="assets/preview-dashboard.png" alt="文章摆渡 v0.5.0 双 Tab 仪表盘与深色模式预览" width="820">
-  <p><i>▲ v0.5.0 扁平化双 Tab 仪表盘（浅色模式实时任务进度与一键诊断复制 / 深色模式偏好设置）</i></p>
-</div>
-
----
-
 ## 📖 项目简介
 
 **「文章摆渡」** 是一款基于 Chrome Manifest V3 规范打造的去中心化创作者扩展。它以掘金为首要创作入口，在创作者明确选择后，将新发布或历史文章可靠地同步至 CSDN 草稿箱。
