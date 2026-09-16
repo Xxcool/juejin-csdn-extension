@@ -1,14 +1,14 @@
-// 插件弹窗交互：管理页面导航、平台登录状态、同步历史和设置。
+// 插件弹窗交互：双 Tab 仪表盘导航、平台登录状态、同步历史与设置管理。
 import type {ExtensionSettings,SyncTask,TaskStatus} from './types';
 import {categoryLabels,stageLabels} from './core/diagnostic';
 import {defaultSettings,formatCategoryMappings,normalizeSettings,parseCategoryMappings} from './core/settings';
 
 const $=<T extends HTMLElement>(selector:string)=>document.querySelector<T>(selector)!;
-const pages=['home','platform','history','settings'];
 let loginStatus:'checking'|'logged-in'|'logged-out'|'error'='checking';
 let checkSequence=0;
 let historyFilter:'all'|'saved'|'failed'|'working'='all';
 let currentSettings:ExtensionSettings=defaultSettings;
+let currentTab:'history'|'settings'='history';
 
 const labels:Record<TaskStatus,string>={
   saved:'同步成功',
@@ -25,26 +25,30 @@ function toast(message:string){
   const element=$('#toast');
   element.textContent=message;
   element.classList.add('show');
-  setTimeout(()=>element.classList.remove('show'),2600);
+  setTimeout(()=>element.classList.remove('show'),2400);
 }
 
-function show(page:string){
-  pages.forEach(id=>$('#'+id).classList.toggle('active',id===page));
-  const home=page==='home';
-  $('#app-header').classList.toggle('subpage',!home);
-  $('#back').classList.toggle('hidden',home);
-  $('#header-brand').classList.toggle('hidden',!home);
-  $('#page-title').textContent=home?'文章摆渡':({platform:'平台管理',history:'同步历史',settings:'设置'} as Record<string,string>)[page];
-  if(page==='history')void loadTasks();
-  if(page==='platform')void checkLogin();
+function switchTab(tab:'history'|'settings'){
+  currentTab=tab;
+  document.querySelectorAll<HTMLButtonElement>('.tab-button').forEach(button=>{
+    const isActive=button.dataset.tab===tab;
+    button.classList.toggle('active',isActive);
+    button.setAttribute('aria-selected',String(isActive));
+  });
+  $('#pane-history').classList.toggle('active',tab==='history');
+  $('#pane-settings').classList.toggle('active',tab==='settings');
+  if(tab==='history')void loadTasks();
+  if(tab==='settings')void loadSettings();
 }
 
 async function checkLogin(){
   const current=++checkSequence;
-  const state=$('#login-state');
+  const pill=$('#login-state');
+  const text=$('#login-text');
   loginStatus='checking';
-  state.className='checking';
-  state.textContent='检测中…';
+  pill.className='platform-pill checking';
+  pill.title='正在检测 CSDN 登录状态…';
+  text.textContent='检测中…';
   try{
     const result=await Promise.race([
       chrome.runtime.sendMessage({type:'CHECK_CSDN_STATUS'}),
@@ -53,21 +57,21 @@ async function checkLogin(){
     if(current!==checkSequence)return;
     if(result?.loggedIn){
       loginStatus='logged-in';
-      state.className='logged';
-      state.textContent=result.account||'已登录';
-      $('#platform-summary').textContent='CSDN 已登录，可以同步';
+      pill.className='platform-pill logged';
+      pill.title='CSDN 已登录，点击可刷新状态';
+      text.textContent=result.account?`CSDN: ${result.account} ✓`:'CSDN 已登录 ✓';
     }else if(result?.ok){
       loginStatus='logged-out';
-      state.className='login-link';
-      state.textContent='去登录 ↗';
-      $('#platform-summary').textContent='CSDN 未登录，请先登录';
+      pill.className='platform-pill login-link';
+      pill.title='CSDN 未登录，点击前往登录';
+      text.textContent='CSDN 未登录 ↗';
     }else throw new Error(result?.message||'检测失败');
   }catch(error){
     if(current!==checkSequence)return;
     loginStatus='error';
-    state.className='login-link';
-    state.textContent='检测失败';
-    $('#platform-summary').textContent='登录状态检测失败，点击重试';
+    pill.className='platform-pill error';
+    pill.title='登录状态检测失败，点击重试';
+    text.textContent='CSDN 检测失败 ↻';
     toast((error as Error).message);
   }
 }
@@ -103,8 +107,9 @@ function taskCard(task:SyncTask){
   if(['failed','needs-user'].includes(task.status))actions.push(`<button class="history-action retry" data-retry="${escapeHtml(task.id)}">重试</button>`);
   if(!['queued','checking-login','transforming','writing'].includes(task.status))actions.push(`<button class="history-action delete" data-delete="${escapeHtml(task.id)}" aria-label="删除本地记录">删除</button>`);
   const action=`<span class="history-actions">${actions.join('')}</span>`;
-  const error=task.error?`<p class="platform-error">${escapeHtml(task.error)}</p>`:'';
-  const diagnostic=task.diagnostic?`<div class="task-diagnostic"><b>${categoryLabels[task.diagnostic.category]} · ${stageLabels[task.diagnostic.stage]}</b><span>${escapeHtml(task.diagnostic.suggestion)}</span></div>`:'';
+  const error=task.error?`<p class="platform-error" title="${escapeHtml(task.error)}">${escapeHtml(task.error)}</p>`:'';
+  const diagText=task.diagnostic?`${task.article.title} [${task.diagnostic.category} - ${task.diagnostic.stage}]: ${task.diagnostic.message} (${task.diagnostic.suggestion})`:'';
+  const diagnostic=task.diagnostic?`<div class="task-diagnostic"><div class="diagnostic-header"><b>${categoryLabels[task.diagnostic.category]} · ${stageLabels[task.diagnostic.stage]}</b><button class="btn-copy-diag" data-copy-diag="${escapeHtml(diagText)}">复制诊断</button></div><span>${escapeHtml(task.diagnostic.suggestion)}</span></div>`:'';
   const warning=task.warnings?.length?`<p class="platform-warning" title="${escapeHtml(task.warnings.join('\n'))}">${escapeHtml(task.warnings.join('；'))}</p>`:'';
   const stats=task.stats?`<p class="task-stats">耗时 ${formatDuration(task.stats.durationMs)}<i>·</i>图片 ${task.stats.imageSucceeded}/${task.stats.imageTotal} 成功${task.stats.imageFailed?`，${task.stats.imageFailed} 失败`:''}</p>`:'';
   const progress=task.progress?`<p class="task-progress"><span style="width:${task.progress.total?Math.round(task.progress.current/task.progress.total*100):12}%"></span></p>`:'';
@@ -129,18 +134,35 @@ async function loadTasks(){
     const all=((result?.tasks||[]) as SyncTask[]).sort((a,b)=>Date.parse(b.updatedAt)-Date.parse(a.updatedAt));
     const tasks=all.filter(task=>historyFilter==='all'||(historyFilter==='saved'?task.status==='saved':historyFilter==='failed'?['failed','needs-user'].includes(task.status):['queued','checking-login','transforming','writing','needs-confirmation'].includes(task.status)));
     const list=$('#task-list');
-    $('#history-count').textContent=historyFilter==='all'?`最近 ${all.length} 条记录`:`筛选出 ${tasks.length} 条`;
-    $('#history-summary').textContent=all.length?`已有 ${all.length} 条同步记录`:'暂无同步记录';
+    $('#history-count').textContent=historyFilter==='all'?`${all.length} 篇`:`${tasks.length}/${all.length} 篇`;
+    const badge=$('#history-badge');
+    badge.textContent=String(all.length);
     const clearButton=$<HTMLButtonElement>('#history-clear');
     clearButton.disabled=!all.length;
     $<HTMLButtonElement>('#history-retry-all').disabled=!all.some(task=>['failed','needs-user'].includes(task.status));
     if(!tasks.length){
-      list.innerHTML=`<div class="empty"><svg viewBox="0 0 48 48"><path d="M8 17h32v22H8zM8 17l5-8h22l5 8M18 25h12v5H18z"/></svg>${all.length?'当前筛选下暂无记录':'暂无同步记录'}</div>`;
+      list.innerHTML=`<div class="empty-state">
+        <div class="empty-icon"><svg viewBox="0 0 48 48"><path d="M8 17h32v22H8zM8 17l5-8h22l5 8M18 25h12v5H18z"/></svg></div>
+        <div class="empty-title">${all.length?'当前筛选下暂无记录':'暂无同步记录'}</div>
+        <p class="empty-desc">${all.length?'可尝试切换上方的状态筛选条件。':'在掘金发布新文章时勾选同步，或在文章列表点击「同步到 CSDN」即可自动生成草稿。'}</p>
+        ${all.length?'':'<button id="btn-goto-juejin" class="empty-action">前往掘金文章管理 ↗</button>'}
+      </div>`;
+      $('#btn-goto-juejin')?.addEventListener('click',()=>void chrome.tabs.create({url:'https://juejin.cn/creator/content/article',active:true}));
       return;
     }
     list.innerHTML=tasks.map(taskCard).join('');
     list.querySelectorAll<HTMLImageElement>('.history-cover img').forEach(image=>image.addEventListener('error',()=>image.remove()));
     list.querySelectorAll<HTMLButtonElement>('[data-open]').forEach(button=>button.addEventListener('click',()=>void chrome.tabs.create({url:button.dataset.open,active:true})));
+    list.querySelectorAll<HTMLButtonElement>('[data-copy-diag]').forEach(button=>button.addEventListener('click',async()=>{
+      const text=button.dataset.copyDiag||'';
+      if(!text)return;
+      try{
+        await navigator.clipboard.writeText(text);
+        toast('诊断信息已复制到剪贴板');
+      }catch{
+        toast('复制失败，请手动复制');
+      }
+    }));
     list.querySelectorAll<HTMLButtonElement>('[data-retry]').forEach(button=>button.addEventListener('click',async()=>{
       button.disabled=true;
       button.textContent='重试中…';
@@ -196,21 +218,37 @@ async function loadSettings(){
   renderSettings(currentSettings);
 }
 
-document.querySelectorAll<HTMLElement>('[data-page]').forEach(button=>button.addEventListener('click',()=>show(button.dataset.page!)));
-$('#back').addEventListener('click',()=>show('home'));
-$('#platform-refresh').addEventListener('click',()=>void checkLogin());
-$('#login-state').addEventListener('click',()=>loginStatus==='error'?void checkLogin():loginStatus==='logged-out'?void chrome.runtime.sendMessage({type:'OPEN_CSDN_LOGIN'}):undefined);
+document.querySelectorAll<HTMLButtonElement>('.tab-button').forEach(button=>{
+  button.addEventListener('click',()=>switchTab(button.dataset.tab as 'history'|'settings'));
+  button.addEventListener('keydown',event=>{
+    if(event.key==='ArrowRight'||event.key==='ArrowLeft'){
+      event.preventDefault();
+      const target=button.dataset.tab==='history'?'settings':'history';
+      const targetBtn=$<HTMLButtonElement>(`.tab-button[data-tab="${target}"]`);
+      targetBtn?.focus();
+      switchTab(target);
+    }
+  });
+});
+
+$('#login-state').addEventListener('click',()=>{
+  if(loginStatus==='logged-out')void chrome.runtime.sendMessage({type:'OPEN_CSDN_LOGIN'});
+  else void checkLogin();
+});
+
 document.querySelectorAll<HTMLButtonElement>('[data-filter]').forEach(button=>button.addEventListener('click',()=>{
   historyFilter=button.dataset.filter as typeof historyFilter;
   document.querySelectorAll('[data-filter]').forEach(item=>item.classList.toggle('active',item===button));
   void loadTasks();
 }));
+
 $<HTMLButtonElement>('#history-retry-all').addEventListener('click',async()=>{
   const result=await chrome.runtime.sendMessage({type:'RETRY_FAILED_TASKS'});
   if(!result?.ok){toast(result?.message||'批量重试失败');return;}
   toast(result.count?`已重试 ${result.count} 个失败任务`:'没有可重试任务');
   setTimeout(()=>void loadTasks(),500);
 });
+
 $<HTMLButtonElement>('#history-clear').addEventListener('click',async()=>{
   if(!confirm('确定清空全部同步历史吗？此操作不会删除 CSDN 草稿。'))return;
   const result=await chrome.runtime.sendMessage({type:'CLEAR_TASKS'});
@@ -218,11 +256,21 @@ $<HTMLButtonElement>('#history-clear').addEventListener('click',async()=>{
   toast('同步历史已清空');
   await loadTasks();
 });
+
 ['#auto-sync','#sync-cover','#confirm-update','#image-failure'].forEach(selector=>$(selector).addEventListener('change',()=>void saveSettingsFromForm()));
 ['#default-category','#category-mappings'].forEach(selector=>$(selector).addEventListener('change',()=>void saveSettingsFromForm()));
+
 chrome.storage.onChanged.addListener((changes,area)=>{
-  if(area==='local'&&changes.syncTasks&&$('#history').classList.contains('active'))void loadTasks();
+  if(area==='local'&&changes.syncTasks&&$('#pane-history').classList.contains('active'))void loadTasks();
 });
+
+try{
+  const version=chrome.runtime.getManifest()?.version;
+  const versionEl=$('#app-version');
+  if(versionEl&&version)versionEl.textContent=`版本 v${version}`;
+}catch{}
+
 void loadTasks();
 void loadSettings();
 void checkLogin();
+

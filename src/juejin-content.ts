@@ -79,12 +79,12 @@ function renderLoginState(){
       option.dataset.initialized='true';
     }
     syncEnabled=input.checked;
-    hint.textContent='同步到 CSDN 草稿箱';
+    hint.textContent='已就绪，发布时保存为草稿';
   }else{
     input.checked=false;
     input.disabled=true;
     syncEnabled=false;
-    hint.textContent=loginState==='checking'?'检测 CSDN 登录状态…':loginState==='logged-out'?'点击登录 CSDN':'登录状态检测失败，点击重试';
+    hint.textContent=loginState==='checking'?'检测 CSDN 登录状态…':loginState==='logged-out'?'点击登录 CSDN':'状态检测失败，点击重试';
   }
 }
 
@@ -107,7 +107,7 @@ async function updateCsdnState(){
 function createNewArticleOption(){
   const option=document.createElement('label');
   option.className='jc-sync-option jc-editor-sync-control';
-  option.innerHTML='<input type="checkbox"><span class="jc-check">✓</span><span class="jc-sync-copy"><b>除掘金外还需同步</b><small>检测 CSDN 登录状态…</small></span>';
+  option.innerHTML='<input type="checkbox"><span class="jc-check">✓</span><span class="jc-sync-copy"><b>同步到 CSDN 草稿</b><small>检测 CSDN 登录状态…</small></span>';
   const input=option.querySelector<HTMLInputElement>('input')!;
   input.addEventListener('change',()=>syncEnabled=input.checked);
   option.addEventListener('click',()=>{

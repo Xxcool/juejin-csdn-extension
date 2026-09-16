@@ -18,12 +18,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run release:zip
+      - name: Generate formatted release notes
+        run: node scripts/extract-release-notes.mjs "$GITHUB_REF_NAME" release/RELEASE_NOTES.md
       - name: Create or update GitHub Release
         run: |
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --title "🚀 $GITHUB_REF_NAME" --notes-file release/RELEASE_NOTES.md
             gh release upload "$GITHUB_REF_NAME" release/*.zip --clobber
           else
-            gh release create "$GITHUB_REF_NAME" release/*.zip --generate-notes --verify-tag
+            gh release create "$GITHUB_REF_NAME" release/*.zip --title "🚀 $GITHUB_REF_NAME" --notes-file release/RELEASE_NOTES.md --verify-tag
           fi
         env:
           GH_TOKEN: ${{ github.token }}

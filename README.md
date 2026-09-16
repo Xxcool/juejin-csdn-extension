@@ -116,7 +116,7 @@ CSDN Web 适配器
 
 掘金编辑器数据通过一个运行在 MAIN world 的窄桥接脚本读取；同步任务由 Manifest V3 Service Worker 管理。CSDN 适配器使用其网页编辑器当前采用的签名协议，不是稳定的官方开放 API。
 
-更完整的实现复盘见 [技术文章草稿](docs/juejin-article.md)。
+
 
 ## 已知限制
 

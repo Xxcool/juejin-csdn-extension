@@ -1,36 +1,119 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="popup.css"><link rel="stylesheet" href="popup-fixes.css"><title>文章摆渡</title></head>
-<body><main>
-<header id="app-header">
-  <button id="back" class="back-button hidden" aria-label="返回"><span>‹</span>返回</button>
-  <img id="header-brand" class="brand-icon" src="logo.svg" alt="">
-  <strong id="page-title">文章摆渡</strong>
-</header>
-<section id="home" class="page active">
-  <div class="hero"><img class="hero-mark" src="logo.svg" alt="文章摆渡 Logo"><h1>文章摆渡</h1><p>把掘金文章安全送达 CSDN 草稿箱</p></div>
-  <nav>
-    <button data-page="platform"><span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg></span><span class="nav-copy"><b>平台管理</b><small id="platform-summary">正在检查 CSDN 登录状态</small></span><em>›</em></button>
-    <button data-page="history"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.6"/><path d="M4 4v4.6h4.6M12 8v4l2.8 1.8"/></svg></span><span class="nav-copy"><b>同步历史</b><small id="history-summary">查看全部同步记录</small></span><em>›</em></button>
-    <button data-page="settings"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M9.8 3.6h4.4l.7 2.2 2 .9 2.1-1 2.2 3.8-1.6 1.7.2 2.2 1.4 1.7-2.2 3.8-2.2-.7-1.8 1.3-.5 2.3H9.8l-.7-2.2-2-.9-2.1 1-2.2-3.8 1.6-1.7-.2-2.2-1.4-1.7L5 5.2l2.2.7z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="nav-copy"><b>设置</b><small>发布联动与隐私说明</small></span><em>›</em></button>
-  </nav>
-</section>
-<section id="platform" class="page"><div class="content-actions"><span>已接入 1 个平台</span><button id="platform-refresh">↻ 刷新状态</button></div><div class="platform-card"><div class="platform-row"><div class="csdn-logo">C</div><div class="platform-copy"><b>CSDN</b><small>文章将保存为草稿，不会公开发布</small></div><div id="login-state" class="checking">检测中…</div></div><p class="tip">同步入口位于掘金编辑器的发布面板中。</p></div></section>
-<section id="history" class="page history-page">
-  <div class="history-meta"><span id="history-count">最近 0 条记录</span><span class="history-meta-actions"><button id="history-retry-all" disabled>重试失败</button><button id="history-clear" disabled>清空</button></span></div>
-  <div class="history-filters" role="group" aria-label="筛选同步记录"><button class="active" data-filter="all">全部</button><button data-filter="saved">成功</button><button data-filter="failed">失败</button><button data-filter="working">进行中</button></div>
-  <div id="task-list" class="task-list"></div>
-</section>
-<section id="settings" class="page settings-page">
-  <div class="settings-group"><small class="settings-kicker">同步行为</small>
-    <label class="setting"><span><b>发布后自动同步</b><small>发布面板中的 CSDN 选项默认勾选</small></span><input id="auto-sync" type="checkbox"><i></i></label>
-    <label class="setting"><span><b>同步文章封面</b><small>关闭后仅同步正文中的图片</small></span><input id="sync-cover" type="checkbox"><i></i></label>
-    <label class="setting"><span><b>更新草稿前确认</b><small>已有 CSDN 草稿时在历史记录中等待确认</small></span><input id="confirm-update" type="checkbox"><i></i></label>
-    <label class="field"><span>图片失败策略</span><select id="image-failure"><option value="continue">保留原链接并继续</option><option value="abort">终止本次同步</option></select></label>
-  </div>
-  <div class="settings-group"><small class="settings-kicker">分类映射</small>
-    <label class="field"><span>默认 CSDN 分类</span><input id="default-category" maxlength="40" placeholder="例如：前端"></label>
-    <label class="field mapping-field"><span>掘金标签映射</span><textarea id="category-mappings" rows="3" placeholder="JavaScript = 前端&#10;后端 = 后端"></textarea><small>每行一条“掘金标签 = CSDN 分类”；命中映射时优先使用映射结果。</small></label>
-  </div>
-  <div class="notice"><b>安全边界</b><p>设置和同步记录只保存在当前 Chrome。清除记录不会删除 CSDN 草稿。</p></div>
-</section>
-<div id="toast" role="status"></div></main><script type="module" src="popup.js"></script></body></html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="popup.css">
+  <title>文章摆渡</title>
+</head>
+<body>
+  <main>
+    <header id="app-header">
+      <div class="brand">
+        <img class="brand-icon" src="logo.svg" alt="文章摆渡 Logo">
+        <strong id="page-title">文章摆渡</strong>
+      </div>
+      <button id="login-state" class="platform-pill checking" title="点击检查或登录 CSDN" aria-label="CSDN 状态">
+        <span class="platform-dot"></span>
+        <span id="login-text" class="platform-text">检测中…</span>
+      </button>
+    </header>
+
+    <nav class="app-tabs" role="tablist">
+      <button id="tab-history" class="tab-button active" data-tab="history" role="tab" aria-selected="true" aria-controls="pane-history">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.6"/><path d="M4 4v4.6h4.6M12 8v4l2.8 1.8"/></svg>
+        <span>同步记录</span>
+        <span id="history-badge" class="tab-badge">0</span>
+      </button>
+      <button id="tab-settings" class="tab-button" data-tab="settings" role="tab" aria-selected="false" aria-controls="pane-settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.8 3.6h4.4l.7 2.2 2 .9 2.1-1 2.2 3.8-1.6 1.7.2 2.2 1.4 1.7-2.2 3.8-2.2-.7-1.8 1.3-.5 2.3H9.8l-.7-2.2-2-.9-2.1 1-2.2-3.8 1.6-1.7-.2-2.2-1.4-1.7L5 5.2l2.2.7z"/><circle cx="12" cy="12" r="3"/></svg>
+        <span>偏好设置</span>
+      </button>
+    </nav>
+
+    <section id="pane-history" class="tab-pane active" role="tabpanel" aria-labelledby="tab-history">
+      <div class="history-toolbar">
+        <div class="history-filters" role="group" aria-label="筛选同步记录">
+          <button class="filter-chip active" data-filter="all">全部</button>
+          <button class="filter-chip" data-filter="saved">成功</button>
+          <button class="filter-chip" data-filter="failed">失败</button>
+          <button class="filter-chip" data-filter="working">进行中</button>
+        </div>
+        <div class="history-actions-bar">
+          <span id="history-count">0 篇</span>
+          <button id="history-retry-all" class="text-btn" disabled>重试失败</button>
+          <button id="history-clear" class="text-btn danger" disabled>清空</button>
+        </div>
+      </div>
+      <div id="task-list" class="task-list"></div>
+    </section>
+
+    <section id="pane-settings" class="tab-pane" role="tabpanel" aria-labelledby="tab-settings">
+      <div class="settings-scroll">
+        <div class="settings-group">
+          <span class="settings-kicker">同步与发布行为</span>
+          <label class="setting-item">
+            <span class="setting-text">
+              <b>发布后自动勾选同步</b>
+              <small>掘金发布面板中的 CSDN 选项默认开启</small>
+            </span>
+            <input id="auto-sync" type="checkbox">
+            <i class="switch"></i>
+          </label>
+          <label class="setting-item">
+            <span class="setting-text">
+              <b>同步文章封面</b>
+              <small>关闭后仅转存正文图片，不迁移封面图</small>
+            </span>
+            <input id="sync-cover" type="checkbox">
+            <i class="switch"></i>
+          </label>
+          <label class="setting-item">
+            <span class="setting-text">
+              <b>更新草稿前二次确认</b>
+              <small>已有 CSDN 草稿时，暂停并等待手动确认</small>
+            </span>
+            <input id="confirm-update" type="checkbox">
+            <i class="switch"></i>
+          </label>
+          <label class="field-item">
+            <span class="field-label">图片转存失败策略</span>
+            <select id="image-failure" class="select-input">
+              <option value="continue">保留原外链地址并继续同步草稿</option>
+              <option value="abort">终止本次同步任务并报错</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="settings-group">
+          <span class="settings-kicker">分类与标签映射</span>
+          <label class="field-item">
+            <span class="field-label">默认 CSDN 分类</span>
+            <input id="default-category" class="text-input" maxlength="40" placeholder="例如：前端 / 后端 / 架构">
+          </label>
+          <label class="field-item">
+            <span class="field-label">掘金标签 → CSDN 分类映射</span>
+            <textarea id="category-mappings" class="textarea-input" rows="3" placeholder="JavaScript = 前端&#10;Vue.js = 前端&#10;Go = 后端"></textarea>
+            <small class="field-hint">每行一条“掘金标签 = CSDN 分类”，命中时优先归类。</small>
+          </label>
+        </div>
+
+        <div class="notice-card">
+          <div class="notice-title">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span>安全与隐私原则</span>
+          </div>
+          <p>任务记录仅保存在当前 Chrome；插件不收集、不存储用户账号密码凭据，CSDN 仅生成草稿不会自动公开发布。</p>
+          <div class="notice-footer">
+            <span id="app-version">版本 v0.5.0</span>
+            <a href="https://github.com/Xxcool/juejin-csdn-extension" target="_blank" rel="noreferrer">GitHub 开源 ↗</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div id="toast" role="status"></div>
+  </main>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

@@ -7,3 +7,4 @@ release/
 .env.*
 coverage/
 *.log
+docs/

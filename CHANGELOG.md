@@ -2,6 +2,41 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [0.5.0] - 2026-09-16
+
+### 界面与体验 (UI / UX)
+
+- 弹窗重构为一体化双 Tab 仪表盘布局，打开即见同步任务与草稿链接，移除原有三级深度菜单。
+- 顶栏新增 CSDN 状态胶囊，直观展示账号与在线状态，支持一键点击刷新与跳转登录。
+- 建立规范化设计系统与 Design Tokens，彻底清除 9px/10px 劣质字号，全面提升文字对比度与可读性。
+- 全套支持自适应深色模式（Dark Mode），夜间写作视觉柔和不刺眼。
+- 任务卡片诊断信息支持一键复制脱敏内容到剪贴板，空状态增加友好使用指引与掘金文章管理直达入口。
+- 掘金编辑器注入控件拟态 Semi Design 官方规范，文案精简为“同步到 CSDN 草稿”，支持深色主题。
+- 任务筛选状态下动态显示消歧条目数（例如 `2/8 篇`），避免总数与过滤视图产生歧义。
+
+### 无障碍与交互细节 (Accessibility)
+
+- 设置开关（Switch）全面改造为无障碍友好架构（采用 `visually-hidden` 配合 `:focus-visible` 焦点环），支持键盘 Tab 导航与屏幕阅读器无障碍操作。
+- 双 Tab 补齐标准 WAI-ARIA 语义（`role="tablist"` / `role="tab"` / `role="tabpanel"`），支持键盘左右箭头（`←` / `→`）平滑轮转与自动聚焦。
+- 扩展版本号改为基于 `manifest.json` 动态注入渲染，彻底杜绝手动写死导致的潜在版本漂移。
+
+### 优化与重构 (Refactoring)
+
+- 彻底移除历史遗留补丁 `src/popup-fixes.css`，合并所有样式变量至统一的设计令牌系统中。
+- 清理掘金页面注入控件中遗留的废弃 `.jc-sync-published` 样式。
+
+### 文档与规划 (Documentation)
+
+- 建立产品全景主规划单一事实来源（SSOT `docs/product-roadmap.md`），明确 P0 致命缺陷防御体系与演进路线。
+- 归档历史 UI/UX 专项重构方案（`docs/ui-ux-refactoring-plan.md`），统一规划权威入口。
+- 修复项目 README 中的失效文档链接。
+
+### 工程与发布 (Engineering)
+
+- 建立 GitHub Release Notes 自动化提取与美化流程，发版时自动基于 CHANGELOG 提取并分类渲染高颜值 Emoji。
+- 新增 `npm run release:notes` 脚本，支持在本地随时预览发布日志。
+
+
 ## [0.4.1] - 2026-09-01
 
 ### 修复
