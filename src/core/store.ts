@@ -5,6 +5,19 @@ const KEY='syncTasks';
 const SETTINGS_KEY='settings';
 const MAPPING_PREFIX='csdnDraftMapping:';
 
+/** 持久化前剔除文章正文：任务历史仅保留元信息，防止 storage.local 冲破配额；重试时经掘金双路径回填。 */
+export function toStorageTask(task:SyncTask):SyncTask{
+  return task.article?.markdown?{...task,article:{...task.article,markdown:''}}:task;
+}
+
+/** 升级迁移：清理历史记录中已存在的全量 Markdown 正文。 */
+export async function migrateStoredTasks():Promise<boolean>{
+  const raw=((await chrome.storage.local.get(KEY))[KEY]||[]) as SyncTask[];
+  if(!raw.some(task=>task.article?.markdown))return false;
+  await saveTasks(raw);
+  return true;
+}
+
 /** 同一平台的同一篇文章只展示和保留最近一次同步状态。 */
 export function uniqueTasks(tasks:SyncTask[]){
   const identities=new Set<string>();
@@ -19,7 +32,7 @@ export function uniqueTasks(tasks:SyncTask[]){
 }
 
 export async function allTasks(){return uniqueTasks(((await chrome.storage.local.get(KEY))[KEY]||[]) as SyncTask[]);}
-export async function saveTasks(tasks:SyncTask[]){await chrome.storage.local.set({[KEY]:tasks.slice(0,200)});}
+export async function saveTasks(tasks:SyncTask[]){await chrome.storage.local.set({[KEY]:tasks.slice(0,200).map(toStorageTask)});}
 export async function saveDraftMapping(articleId:string,csdnArticleId:string,draftUrl?:string){
   await chrome.storage.local.set({[MAPPING_PREFIX+articleId]:{articleId,csdnArticleId,draftUrl,updatedAt:new Date().toISOString()}});
 }

@@ -1,14 +1,15 @@
 // 核心同步逻辑回归测试：覆盖任务去重、异步重试、并发上限和 CSDN 请求契约。
 import {afterEach,describe,expect,it,vi} from 'vitest';
-import {mapConcurrent,retry} from '../src/core/async';
-import {deleteTask,getDraftMapping,saveArticleDraftMapping,uniqueTasks} from '../src/core/store';
+import {Semaphore,mapConcurrent,retry} from '../src/core/async';
+import {deleteTask,getDraftMapping,migrateStoredTasks,saveArticleDraftMapping,toStorageTask,uniqueTasks} from '../src/core/store';
 import {articleIdentityKeys,canDeleteTask,extractCsdnArticleId,findMatchingTask,isActiveTask,isInterruptedTask,isRetryableTask,isUncertainCreateTask} from '../src/core/task';
-import {classifySyncError} from '../src/core/diagnostic';
+import {SyncError,classifySyncError} from '../src/core/diagnostic';
 import {isSupportedMessage} from '../src/core/message';
 import {defaultSettings,formatCategoryMappings,normalizeSettings,parseCategoryMappings,resolveCsdnCategories,shouldConfirmDraftUpdate} from '../src/core/settings';
-import {fetchJuejinDraftByArticleId} from '../src/source/juejin-api';
-import {applyImageTransfers,buildSaveArticleBody,checkCsdnAuth,collectExternalImages,enforceImageFailurePolicy,imageExtension,normalizeMarkdown,summarizeImageTransfers,validateCsdnArticle} from '../src/targets/csdn-api';
+import {fetchJuejinDraftByArticleId,fetchJuejinDraftByDraftId} from '../src/source/juejin-api';
+import {applyImageTransfers,buildSaveArticleBody,checkCsdnAuth,collectExternalImages,enforceImageFailurePolicy,fetchCsdnArticleState,imageExtension,normalizeMarkdown,sanitizeJuejinContainers,saveDraftViaApi,summarizeImageTransfers,validateCsdnArticle} from '../src/targets/csdn-api';
 import type {Article,SyncTask} from '../src/types';
+import rules from '../rules.json';
 
 const article:Article={id:'juejin-1',title:'测试文章',markdown:'正文内容足够长，用于测试同步请求。',tags:['TypeScript'],sourceUrl:'https://juejin.cn/post/1'};
 
@@ -110,6 +111,7 @@ describe('后台消息与失败诊断',()=>{
   it('只接受已声明的扩展消息',()=>{
     expect(isSupportedMessage({type:'GET_TASKS'})).toBe(true);
     expect(isSupportedMessage({type:'SYNC_NEW_ARTICLE'})).toBe(true);
+    expect(isSupportedMessage({type:'REPORT_JUEJIN_UUID',uuid:'x'})).toBe(true);
     expect(isSupportedMessage({type:'CONFIRM_PUBLISH'})).toBe(false);
     expect(isSupportedMessage({type:'UNKNOWN'})).toBe(false);
     expect(isSupportedMessage(null)).toBe(false);
@@ -125,7 +127,12 @@ describe('后台消息与失败诊断',()=>{
   });
 
   it('对诊断内容中的敏感查询参数脱敏',()=>{
-    expect(classifySyncError(new Error('失败 https://example.com/?token=secret&x=1'),'network').message).toContain('token=***');
+    expect(classifySyncError(new Error('失败 https://example.com/?token=secret&x=1'),'draft').message).toContain('token=***');
+  });
+
+  it('结构化错误优先：5xx 凭证失败不再被误判为内容异常',()=>{
+    expect(classifySyncError(new SyncError('获取 CSDN 图片上传凭证失败 (500)','network','images'),'content')).toMatchObject({category:'network',stage:'images'});
+    expect(classifySyncError(new SyncError('该 CSDN 文章已公开发布，已阻断同步','blocked','draft'),'draft')).toMatchObject({category:'blocked',suggestion:expect.stringContaining('已公开发布')});
   });
 });
 
@@ -197,5 +204,85 @@ describe('平台 API 边界',()=>{
 
     vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response('',{status:403,headers:{'x-ca-error-message':'Invalid Signature'}})));
     await expect(checkCsdnAuth()).resolves.toMatchObject({ok:false,loggedIn:false,message:expect.stringContaining('Invalid Signature')});
+  });
+});
+
+describe('v0.5.1 底座加固',()=>{
+  it('全局闸门把同时执行的同步任务限制在上限内',async()=>{
+    const gate=new Semaphore(2);
+    let active=0;
+    let peak=0;
+    const results=await Promise.all(Array.from({length:6},(_,index)=>gate.run(async()=>{
+      active++;
+      peak=Math.max(peak,active);
+      await new Promise(resolve=>setTimeout(resolve,5));
+      active--;
+      return index;
+    })));
+    expect(results).toEqual([0,1,2,3,4,5]);
+    expect(peak).toBe(2);
+  });
+
+  it('任务持久化前剔除正文，升级时平滑迁移存量记录',async()=>{
+    const full:SyncTask={id:'fat',article,platform:'csdn',status:'saved',createdAt:'2026-09-01T00:00:00Z',updatedAt:'2026-09-01T00:00:00Z',attempts:1,csdnArticleId:'123'};
+    expect(toStorageTask(full).article.markdown).toBe('');
+    expect(full.article.markdown.length).toBeGreaterThan(0);
+
+    const storage:Record<string,unknown>={syncTasks:[full]};
+    vi.stubGlobal('chrome',{storage:{local:{get:vi.fn(async(key:string)=>({[key]:storage[key]})),set:vi.fn(async(value:Record<string,unknown>)=>Object.assign(storage,value))}}});
+    await expect(migrateStoredTasks()).resolves.toBe(true);
+    expect((storage.syncTasks as SyncTask[])[0].article.markdown).toBe('');
+    await expect(migrateStoredTasks()).resolves.toBe(false);
+  });
+
+  it('按草稿 ID 直查原始 Markdown，服务重试双路径',async()=>{
+    const fetchMock=vi.fn().mockResolvedValue(new Response(JSON.stringify({err_no:0,err_msg:'',data:{article_draft:{id:'draft-9',title:'草稿标题',mark_content:'这是足够长的 Markdown 正文，用于验证按草稿直查。',tags:[{tag_name:'前端'}]}}}),{status:200}));
+    vi.stubGlobal('fetch',fetchMock);
+    await expect(fetchJuejinDraftByDraftId('draft-9','uuid','兜底标题')).resolves.toMatchObject({id:'draft-9',sourceDraftId:'draft-9',title:'草稿标题',markdown:expect.stringContaining('Markdown'),tags:['前端']});
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({draft_id:'draft-9'});
+  });
+
+  it('按 pubStatus 与 status 识别已发布文章，接口异常时放行更新',async()=>{
+    const respond=(data:unknown,status=200)=>vi.fn().mockResolvedValue(new Response(JSON.stringify(data),{status}));
+    vi.stubGlobal('fetch',respond({code:200,data:{pubStatus:'published'}}));
+    await expect(fetchCsdnArticleState('1')).resolves.toBe('published');
+    vi.stubGlobal('fetch',respond({code:200,data:{pubStatus:'draft'}}));
+    await expect(fetchCsdnArticleState('1')).resolves.toBe('draft');
+    vi.stubGlobal('fetch',respond({code:200,data:{status:0}}));
+    await expect(fetchCsdnArticleState('1')).resolves.toBe('published');
+    vi.stubGlobal('fetch',respond({code:200,data:{status:2}}));
+    await expect(fetchCsdnArticleState('1')).resolves.toBe('draft');
+    vi.stubGlobal('fetch',respond({code:500,data:null}));
+    await expect(fetchCsdnArticleState('1')).resolves.toBe('unknown');
+    vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response('',{status:403})));
+    await expect(fetchCsdnArticleState('1')).resolves.toBe('unknown');
+  });
+
+  it('图片上传凭证 5xx 按 abort 策略终止时归类为网络异常',async()=>{
+    vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
+      const url=String(input);
+      if(url.includes('getBaseInfo'))return new Response(JSON.stringify({code:200,data:{name:'tester'}}),{status:200});
+      if(url.includes('img.example.com'))return new Response(new Blob(['x'],{type:'image/png'}));
+      return new Response('',{status:500});
+    }));
+    const imageArticle={...article,title:'足够长的同步标题',markdown:'正文包含外链图片 ![](https://img.example.com/a.png) 且长度超过二十个字符。'};
+    await expect(saveDraftViaApi(imageArticle,{imageFailurePolicy:'abort'})).rejects.toMatchObject({category:'network',stage:'images'});
+  });
+
+  it('转译掘金 ::: 容器语法为引用块，且不碰代码围栏内的字面量',()=>{
+    expect(sanitizeJuejinContainers(':::tips\n提示内容\n:::')).toBe('> 💡 提示：\n> 提示内容');
+    expect(sanitizeJuejinContainers(':::warning 自定义标题\n第一行\n\n第二行\n:::')).toBe('> ⚠️ 注意：自定义标题\n> 第一行\n>\n> 第二行');
+    expect(sanitizeJuejinContainers('```\n:::tips\n fenced\n```\n:::danger\n危险\n:::')).toBe('```\n:::tips\n fenced\n```\n> 🚨 警告：\n> 危险');
+    expect(sanitizeJuejinContainers(':::custom-kind\n内容\n:::')).toBe('> ℹ️ custom-kind：\n> 内容');
+    expect(normalizeMarkdown('---\ntheme: juejin\n---\n:::info\n说明\n:::')).toBe('> ℹ️ 说明：\n> 说明');
+  });
+
+  it('DNR 掘金规则收窄为草稿列表与详情两条接口路径',()=>{
+    const typed=rules as {id:number;condition:{urlFilter:string}}[];
+    const juejinRules=typed.filter(rule=>rule.condition.urlFilter.includes('api.juejin.cn'));
+    expect(juejinRules.map(rule=>rule.condition.urlFilter).sort()).toEqual([
+      '||api.juejin.cn/content_api/v1/article/list_by_user',
+      '||api.juejin.cn/content_api/v1/article_draft/detail'
+    ]);
   });
 });

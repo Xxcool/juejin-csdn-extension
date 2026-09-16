@@ -1,32 +1,60 @@
 // 扩展后台协调器：管理登录状态、同步任务和 CSDN 草稿写入。
-import {allTasks,deleteTask,getArticleDraftMapping,getSettings,patchTask,preserveTaskMappings,putTask,saveArticleDraftMapping,saveSettings,saveTasks} from './core/store';
+import {Semaphore} from './core/async';
+import {allTasks,deleteTask,getArticleDraftMapping,getSettings,migrateStoredTasks,patchTask,preserveTaskMappings,putTask,saveArticleDraftMapping,saveSettings,saveTasks} from './core/store';
 import {canDeleteTask,extractCsdnArticleId,findMatchingTask,isActiveTask,isInterruptedTask,isRetryableTask,isUncertainCreateTask} from './core/task';
-import {classifySyncError} from './core/diagnostic';
+import {SyncError,classifySyncError} from './core/diagnostic';
 import {isSupportedMessage} from './core/message';
 import {resolveCsdnCategories,shouldConfirmDraftUpdate} from './core/settings';
-import {fetchJuejinDraftByArticleId} from './source/juejin-api';
+import {fetchJuejinDraftByArticleId,fetchJuejinDraftByDraftId} from './source/juejin-api';
 import {csdnAdapter} from './targets/csdn';
-import {checkCsdnAuth,saveDraftViaApi,validateCsdnArticle} from './targets/csdn-api';
+import {checkCsdnAuth,fetchCsdnArticleState,saveDraftViaApi,validateCsdnArticle} from './targets/csdn-api';
 import type {Article,ExtensionSettings,SyncTask,TaskStage} from './types';
 import {uid} from './types';
 
 const runningTasks=new Set<string>();
+/** 全局任务闸门：同一时间最多 2 篇文章在同步，批量重试自动排队，避免触发平台限流。 */
+const taskGate=new Semaphore(2);
+const JUEJIN_UUID_KEY='juejinUuid';
 
-async function execute(task:SyncTask){
-  if(runningTasks.has(task.id))return;
-  runningTasks.add(task.id);
+async function getJuejinUuid(){return((await chrome.storage.local.get(JUEJIN_UUID_KEY))[JUEJIN_UUID_KEY] as string|undefined)||'';}
+
+/**
+ * 重试与恢复时任务正文已从 storage 瘦身，按双路径从掘金回填：
+ * 有草稿 ID 直查草稿详情；历史文章经 list_by_user 反查后读取。
+ */
+async function ensureArticleContent(article:Article):Promise<Article>{
+  if(article.markdown.trim().length>=20)return article;
+  const uuid=await getJuejinUuid();
+  if(!uuid)throw new SyncError('本地已清理文章正文，请先打开掘金任意页面后重试','unknown','validation');
+  if(article.sourceDraftId){
+    const fetched=await fetchJuejinDraftByDraftId(article.sourceDraftId,uuid,article.title);
+    return{...fetched,id:article.id,sourceUrl:article.sourceUrl};
+  }
+  if(/^\d+$/.test(article.id)){
+    const fetched=await fetchJuejinDraftByArticleId(article.id,uuid,article.title);
+    return{...fetched,sourceUrl:article.sourceUrl||fetched.sourceUrl};
+  }
+  throw new SyncError('文章正文已清理且缺少掘金草稿标识，请从掘金页面重新发起同步','content','validation');
+}
+
+async function runTask(task:SyncTask){
   const startedAt=Date.now();
   let stage:TaskStage='validation';
   try{
-    validateCsdnArticle(task.article);
+    const article=await ensureArticleContent(task.article);
+    validateCsdnArticle(article);
     const settings=await getSettings();
     await patchTask(task.id,{status:'checking-login',attempts:task.attempts+1,error:undefined,diagnostic:undefined,warnings:undefined,stats:undefined,progress:{current:0,total:0,message:'正在检查 CSDN 登录状态'}});
-    const article=csdnAdapter.transform(task.article);
+    const transformed=csdnAdapter.transform(article);
     await patchTask(task.id,{status:'transforming',progress:{current:0,total:0,message:'正在处理文章内容'}});
     stage='authentication';
-    const result=await saveDraftViaApi(article,{
+    if(task.csdnArticleId){
+      const state=await fetchCsdnArticleState(task.csdnArticleId);
+      if(state==='published')throw new SyncError('该 CSDN 文章已公开发布，为避免覆盖线上文章已阻断同步。如需继续，请删除本条同步记录后另存新草稿。','blocked','draft');
+    }
+    const result=await saveDraftViaApi(transformed,{
       articleId:task.csdnArticleId,
-      categories:resolveCsdnCategories(article.tags,settings),
+      categories:resolveCsdnCategories(transformed.tags,settings),
       syncCover:settings.syncCover,
       imageFailurePolicy:settings.imageFailurePolicy,
       onPreparing:()=>{stage='content';},
@@ -40,10 +68,18 @@ async function execute(task:SyncTask){
     setTimeout(()=>chrome.action.setBadgeText({text:''}),5000);
   }catch(error){
     const diagnostic=classifySyncError(error,stage);
-    await patchTask(task.id,{status:diagnostic.category==='login'?'needs-user':'failed',error:diagnostic.message,diagnostic,progress:undefined});
+    await patchTask(task.id,{status:diagnostic.category==='login'||diagnostic.category==='blocked'?'needs-user':'failed',error:diagnostic.message,diagnostic,progress:undefined});
     await chrome.action.setBadgeBackgroundColor({color:'#a24332'});
     await chrome.action.setBadgeText({text:'!'});
     throw error;
+  }
+}
+
+async function execute(task:SyncTask){
+  if(runningTasks.has(task.id))return;
+  runningTasks.add(task.id);
+  try{
+    await taskGate.run(()=>runTask(task));
   }finally{runningTasks.delete(task.id);}
 }
 
@@ -81,7 +117,8 @@ async function recoverInterruptedTasks(){
   await Promise.allSettled(interrupted.map(task=>execute(task)));
 }
 
-const recovery=recoverInterruptedTasks();
+/** 启动序：先完成 storage 瘦身迁移，再恢复中断任务（恢复的任务经双路径回填正文）。 */
+const recovery=migrateStoredTasks().then(()=>recoverInterruptedTasks());
 
 type PendingHistory={articleId:string;title:string;sourceUrl:string;uuid:string;expiresAt:number};
 
@@ -90,6 +127,7 @@ async function openCsdnLogin(){
 }
 
 async function syncHistory(request:Omit<PendingHistory,'expiresAt'>){
+  if(request.uuid)await chrome.storage.local.set({[JUEJIN_UUID_KEY]:request.uuid});
   const auth=await checkCsdnAuth();
   if(!auth.ok)throw new Error(auth.message||'CSDN 登录状态检测失败');
   if(!auth.loggedIn){
@@ -128,6 +166,10 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
       reply(await checkCsdnAuth());
     }else if(message.type==='OPEN_CSDN_LOGIN'){
       await openCsdnLogin();
+      reply({ok:true});
+    }else if(message.type==='REPORT_JUEJIN_UUID'){
+      const uuid=String(message.uuid||'');
+      if(uuid)await chrome.storage.local.set({[JUEJIN_UUID_KEY]:uuid});
       reply({ok:true});
     }else if(message.type==='SYNC_HISTORY_ARTICLE'){
       reply(await syncHistory({articleId:String(message.articleId),title:String(message.title||''),sourceUrl:String(message.sourceUrl||''),uuid:String(message.uuid||'')}));

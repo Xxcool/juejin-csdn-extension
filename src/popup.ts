@@ -13,7 +13,7 @@ let currentTab:'history'|'settings'='history';
 const labels:Record<TaskStatus,string>={
   saved:'同步成功',
   failed:'同步失败',
-  'needs-user':'等待登录',
+  'needs-user':'需要处理',
   'needs-confirmation':'等待确认',
   queued:'等待同步',
   'checking-login':'检查登录',

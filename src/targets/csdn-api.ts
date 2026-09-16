@@ -1,7 +1,8 @@
 // CSDN 草稿 API 适配器：清洗 Markdown、转存图片，并直接保存到草稿箱。
 import {marked} from 'marked';
-import type {Article,ImageFailurePolicy,TaskProgress} from '../types';
+import type {Article,ImageFailurePolicy,TaskErrorCategory,TaskProgress} from '../types';
 import {mapConcurrent,retry} from '../core/async';
+import {SyncError} from '../core/diagnostic';
 import type {AdapterResult} from './adapter';
 
 const API='https://bizapi.csdn.net/blog-console-api/v3/mdeditor/saveArticle';
@@ -12,9 +13,17 @@ const CSDN_WEB_SIGNING_KEY='9znpamsyl2c7cdrr9sas0le9vbc3r6ba';
 /** 按 CSDN Markdown 编辑器的标题规则在发起网络请求前拦截无效内容。 */
 export function validateCsdnArticle(article:Article){
   const title=article.title.trim();
-  if(title.length<5)throw new Error('CSDN 标题至少需要 5 个字符，请修改掘金标题后重新同步');
-  if(title.length>100)throw new Error('CSDN 标题最多允许 100 个字符，请缩短掘金标题后重新同步');
-  if(article.markdown.trim().length<20)throw new Error('文章正文不完整，暂无法同步到 CSDN');
+  if(title.length<5)throw new SyncError('CSDN 标题至少需要 5 个字符，请修改掘金标题后重新同步','content','validation');
+  if(title.length>100)throw new SyncError('CSDN 标题最多允许 100 个字符，请缩短掘金标题后重新同步','content','validation');
+  if(article.markdown.trim().length<20)throw new SyncError('文章正文不完整，暂无法同步到 CSDN','content','validation');
+}
+
+/** HTTP 状态码到错误类别的映射；未覆盖的状态码交由调用方给定兜底类别。 */
+function statusErrorCategory(status:number):TaskErrorCategory|undefined{
+  if(status===401)return'login';
+  if(status===429)return'rate-limit';
+  if(status>=500)return'network';
+  return undefined;
 }
 
 type UploadSignature={filePath:string;host:string;accessId:string;policy:string;signature:string;callbackUrl:string;callbackBody:string;callbackBodyType:string;customParam:{rtype:string;filePath:string;isAudit:number;'x-image-app':string;type:string;'x-image-suffix':string;username:string}};
@@ -56,13 +65,84 @@ export async function checkCsdnAuth(){
   }
 }
 
-/** 去掉掘金导出主题元数据，并统一为 CSDN 支持的 Markdown 围栏。 */
+export type CsdnArticleState='draft'|'published'|'unknown';
+
+/**
+ * 写入前查询 CSDN 文章当前状态：编辑器加载接口按 pubStatus / status 区分草稿与已发布。
+ * 查询失败时返回 unknown（放行更新），避免状态接口波动阻断正常草稿同步。
+ */
+export async function fetchCsdnArticleState(articleId:string):Promise<CsdnArticleState>{
+  const path=`/blog-console-api/v3/editor/getArticle?id=${encodeURIComponent(articleId)}`;
+  try{
+    const response=await fetch(`https://bizapi.csdn.net${path}`,{method:'GET',credentials:'include',headers:await signedHeaders(path,'GET'),signal:AbortSignal.timeout(8000)});
+    if(!response.ok)return'unknown';
+    const result=await response.json() as {code?:number;data?:{status?:number;pubStatus?:string}};
+    if(result.code!==200||!result.data)return'unknown';
+    if(typeof result.data.pubStatus==='string'&&result.data.pubStatus)return result.data.pubStatus==='draft'?'draft':'published';
+    if(typeof result.data.status==='number')return result.data.status===2?'draft':'published';
+    return'unknown';
+  }catch{
+    return'unknown';
+  }
+}
+
+const CONTAINER_KINDS:Record<string,{emoji:string;label:string}>={
+  tips:{emoji:'💡',label:'提示'},
+  info:{emoji:'ℹ️',label:'说明'},
+  note:{emoji:'📝',label:'笔记'},
+  warning:{emoji:'⚠️',label:'注意'},
+  danger:{emoji:'🚨',label:'警告'},
+  success:{emoji:'✅',label:'成功'}
+};
+
+/** 掘金 ::: 容器语法转译为通用 Markdown 引用块，避免 CSDN 编辑器出现字面量乱码；代码围栏内的 ::: 保持原样。 */
+export function sanitizeJuejinContainers(markdown:string):string{
+  const lines=markdown.split('\n');
+  const output:string[]=[];
+  let inFence=false;
+  let fenceMarker='';
+  let container:{header:string;body:string[]}|null=null;
+  const flushContainer=()=>{
+    if(!container)return;
+    output.push(container.header);
+    output.push(...(container.body.length?container.body:['>']));
+    container=null;
+  };
+  for(const line of lines){
+    if(container){
+      if(/^ {0,3}:::[ \t]*$/.test(line)){flushContainer();continue;}
+      container.body.push(line.trim()?`> ${line}`:'>');
+      continue;
+    }
+    const fence=line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if(fence){
+      if(!inFence){inFence=true;fenceMarker=fence[1][0];}
+      else if(fence[1][0]===fenceMarker){inFence=false;fenceMarker='';}
+      output.push(line);
+      continue;
+    }
+    if(!inFence){
+      const open=line.match(/^ {0,3}:::[ \t]*([A-Za-z\u4e00-\u9fa5][\w\u4e00-\u9fa5-]*)?[ \t]*(.*)$/);
+      if(open&&open[1]){
+        const meta=CONTAINER_KINDS[open[1].toLowerCase()]||{emoji:'ℹ️',label:open[1]};
+        container={header:`> ${meta.emoji} ${meta.label}：${open[2].trim()}`,body:[]};
+        continue;
+      }
+    }
+    output.push(line);
+  }
+  flushContainer();
+  return output.join('\n');
+}
+
+/** 去掉掘金导出主题元数据，统一为 CSDN 支持的 Markdown 围栏，并转译掘金特有容器语法。 */
 export function normalizeMarkdown(source:string){
   let markdown=source.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');
   const frontmatter=markdown.match(/^---[ \t]*\n([\s\S]*?)\n---[ \t]*(?:\n|$)/);
   if(frontmatter&&/^(?:theme|highlight)\s*:/m.test(frontmatter[1]))markdown=markdown.slice(frontmatter[0].length);
   markdown=markdown.replace(/^(?:(?:theme|highlight)\s*:[^\n]*\n){1,2}(?:\n)?/,'');
   markdown=markdown.replace(/^(\s*)~~~([^\n]*)$/gm,'$1```$2');
+  markdown=sanitizeJuejinContainers(markdown);
   return markdown.trim();
 }
 
@@ -78,15 +158,15 @@ async function uploadImageToCsdn(src:string){
   const hostname=new URL(src).hostname;
   const credentials:RequestCredentials=hostname.endsWith('-private.juejin.cn')?'include':'omit';
   const imageResponse=await fetch(src,{credentials});
-  if(!imageResponse.ok)throw new Error(`图片下载失败 (${imageResponse.status})：${src}`);
+  if(!imageResponse.ok)throw new SyncError(`图片下载失败 (${imageResponse.status})：${src}`,statusErrorCategory(imageResponse.status)??'content','images');
   const imageBlob=await imageResponse.blob();
-  if(!imageBlob.type.startsWith('image/'))throw new Error(`图片地址返回了非图片内容：${src}`);
+  if(!imageBlob.type.startsWith('image/'))throw new SyncError(`图片地址返回了非图片内容：${src}`,'content','images');
   const extension=imageExtension(src,imageBlob);
   const signaturePath='/resource-api/v1/image/direct/upload/signature';
   const signatureResponse=await fetch(`https://bizapi.csdn.net${signaturePath}`,{method:'POST',credentials:'include',headers:await signedHeaders(signaturePath,'POST'),body:JSON.stringify({imageTemplate:'',appName:'direct_blog_markdown',imageSuffix:extension})});
-  if(!signatureResponse.ok)throw new Error(`获取 CSDN 图片上传凭证失败 (${signatureResponse.status})`);
+  if(!signatureResponse.ok)throw new SyncError(`获取 CSDN 图片上传凭证失败 (${signatureResponse.status})`,statusErrorCategory(signatureResponse.status)??'platform-change','images');
   const signatureResult=await signatureResponse.json() as {code?:number;msg?:string;message?:string;data?:UploadSignature};
-  if(signatureResult.code!==200||!signatureResult.data)throw new Error(signatureResult.msg||signatureResult.message||'获取 CSDN 图片上传凭证失败');
+  if(signatureResult.code!==200||!signatureResult.data)throw new SyncError(signatureResult.msg||signatureResult.message||'获取 CSDN 图片上传凭证失败','platform-change','images');
 
   const upload=signatureResult.data;
   const custom=upload.customParam;
@@ -107,9 +187,9 @@ async function uploadImageToCsdn(src:string){
   form.append('x:username',custom.username);
   form.append('file',imageBlob,`image.${extension}`);
   const uploadResponse=await fetch(upload.host,{method:'POST',body:form});
-  if(!uploadResponse.ok)throw new Error(`上传图片到 CSDN 失败 (${uploadResponse.status})`);
+  if(!uploadResponse.ok)throw new SyncError(`上传图片到 CSDN 失败 (${uploadResponse.status})`,statusErrorCategory(uploadResponse.status)??'network','images');
   const uploadResult=await uploadResponse.json() as {code?:number;msg?:string;message?:string;data?:{imageUrl?:string}};
-  if(uploadResult.code!==200||!uploadResult.data?.imageUrl)throw new Error(uploadResult.msg||uploadResult.message||'上传图片到 CSDN 失败');
+  if(uploadResult.code!==200||!uploadResult.data?.imageUrl)throw new SyncError(uploadResult.msg||uploadResult.message||'上传图片到 CSDN 失败','platform-change','images');
   return uploadResult.data.imageUrl;
 }
 
@@ -129,7 +209,7 @@ export function collectExternalImages(markdown:string){
 
 /** CSDN 无法稳定读取掘金 CDN，保存前将正文和封面图片转存到 CSDN。 */
 type SaveDraftOptions={articleId?:string;categories?:string[];syncCover?:boolean;imageFailurePolicy?:ImageFailurePolicy;onPreparing?:()=>void|Promise<void>;onProgress?:(progress:TaskProgress)=>void|Promise<void>;onSaving?:()=>void|Promise<void>};
-type ImageTransfer={src:string;target?:string;error?:string};
+type ImageTransfer={src:string;target?:string;error?:string;errorCategory?:TaskErrorCategory};
 
 export function summarizeImageTransfers(transfers:ImageTransfer[]){
   return{imageTotal:transfers.length,imageSucceeded:transfers.filter(item=>item.target).length,imageFailed:transfers.filter(item=>item.error).length};
@@ -137,7 +217,7 @@ export function summarizeImageTransfers(transfers:ImageTransfer[]){
 
 export function enforceImageFailurePolicy(transfers:ImageTransfer[],policy:ImageFailurePolicy='continue'){
   const failed=transfers.filter(item=>item.error);
-  if(policy==='abort'&&failed.length)throw new Error(`有 ${failed.length} 张图片转存失败，已按设置终止同步：${failed[0].error}`);
+  if(policy==='abort'&&failed.length)throw new SyncError(`有 ${failed.length} 张图片转存失败，已按设置终止同步：${failed[0].error}`,failed[0].errorCategory??'content','images');
 }
 
 export function applyImageTransfers(markdown:string,cover:string|undefined,transfers:ImageTransfer[]){
@@ -161,7 +241,9 @@ async function prepareArticle(article:Article,options:SaveDraftOptions){
   const transfers=await mapConcurrent(images,3,async src=>{
     let result:ImageTransfer;
     try{result={src,target:await retry(()=>uploadImageToCsdn(src))};}
-    catch(error){result={src,error:(error as Error).message};}
+    catch(error){
+      result={src,error:(error as Error).message,errorCategory:error instanceof SyncError?error.category:undefined};
+    }
     finally{
       completed++;
       await options.onProgress?.({current:completed,total:images.length,message:`正在转存图片 ${completed}/${images.length}`});
@@ -182,8 +264,8 @@ export function buildSaveArticleBody(article:Article,prepared:{markdown:string;h
 export async function saveDraftViaApi(article:Article,options:SaveDraftOptions={}):Promise<AdapterResult>{
   validateCsdnArticle(article);
   const auth=await checkCsdnAuth();
-  if(!auth.ok)throw new Error(auth.message||'CSDN 登录状态检测失败');
-  if(!auth.loggedIn)throw new Error('请先登录 CSDN');
+  if(!auth.ok)throw new SyncError(auth.message||'CSDN 登录状态检测失败','platform-change','authentication');
+  if(!auth.loggedIn)throw new SyncError('请先登录 CSDN','login','authentication');
   await options.onPreparing?.();
   const prepared=await prepareArticle(article,options);
   const body=buildSaveArticleBody(article,prepared,options.articleId,options.categories);
@@ -191,12 +273,12 @@ export async function saveDraftViaApi(article:Article,options:SaveDraftOptions={
   const response=await fetch(API,{method:'POST',credentials:'include',headers:await signedHeaders('/blog-console-api/v3/mdeditor/saveArticle','POST'),body:JSON.stringify(body)});
   if(!response.ok){
     const text=await response.text().catch(()=>'');
-    throw new Error('CSDN API 请求失败 ('+response.status+')'+(text?': '+text.slice(0,120):''));
+    throw new SyncError('CSDN API 请求失败 ('+response.status+')'+(text?': '+text.slice(0,120):''),statusErrorCategory(response.status)??'platform-change','draft');
   }
   const result=await response.json() as {code?:number;msg?:string;message?:string;data?:{id?:string;article_id?:string;url?:string}};
-  if(result.code!==200&&result.code!==0)throw new Error(result.msg||result.message||'CSDN 返回错误码 '+result.code);
+  if(result.code!==200&&result.code!==0)throw new SyncError(result.msg||result.message||'CSDN 返回错误码 '+result.code,'platform-change','draft');
   const articleId=result.data?.id||result.data?.article_id;
   const draftUrl=result.data?.url||(articleId?'https://editor.csdn.net/md/?articleId='+articleId:'');
-  if(!draftUrl||!articleId)throw new Error('CSDN 已保存草稿，但没有返回草稿标识');
+  if(!draftUrl||!articleId)throw new SyncError('CSDN 已保存草稿，但没有返回草稿标识','platform-change','draft');
   return{draftUrl,articleId:String(articleId),warnings:prepared.warnings,stats:prepared.stats};
 }

@@ -1,5 +1,6 @@
 // 掘金创作者 API：从已发布文章映射到草稿，并读取原始 Markdown。
 import type {Article} from '../types';
+import {SyncError} from '../core/diagnostic';
 
 const API_BASE='https://api.juejin.cn/content_api/v1';
 
@@ -8,7 +9,7 @@ type ArticleListItem={article_info?:{article_id?:string;draft_id?:string;title?:
 type DraftDetail={article_draft?:{id?:string;title?:string;mark_content?:string;cover_image?:string;tags?:{tag_name?:string}[]}};
 
 async function post<T>(path:string,body:unknown,uuid:string):Promise<T>{
-  if(!uuid)throw new Error('无法读取掘金请求标识，请刷新文章列表后重试');
+  if(!uuid)throw new SyncError('无法读取掘金请求标识，请刷新文章列表后重试','platform-change','content');
   const query=new URLSearchParams({aid:'2608',uuid,spider:'0'});
   const response=await fetch(`${API_BASE}${path}?${query}`,{
     method:'POST',
@@ -16,13 +17,39 @@ async function post<T>(path:string,body:unknown,uuid:string):Promise<T>{
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify(body)
   });
-  if(!response.ok)throw new Error(`掘金 API 请求失败 (${response.status})`);
+  if(!response.ok){
+    const status=response.status;
+    throw new SyncError(`掘金 API 请求失败 (${status})`,status===429?'rate-limit':status>=500?'network':'platform-change','content');
+  }
   const result=await response.json() as ApiResponse<T>;
-  if(result.err_no!==0)throw new Error(result.err_msg||'掘金返回错误');
+  if(result.err_no!==0)throw new SyncError(result.err_msg||'掘金返回错误','platform-change','content');
   return result.data;
 }
 
-/** 根据文章 ID 找到创作者草稿并读取原始 Markdown。 */
+/** 读取草稿正文；掘金公开前台接口只含渲染后 HTML，原始 Markdown 必须走创作者草稿详情。 */
+async function fetchDraftContent(draftId:string,uuid:string){
+  const detail=await post<DraftDetail>('/article_draft/detail',{draft_id:draftId},uuid);
+  const draft=detail.article_draft;
+  const markdown=draft?.mark_content?.trim()||'';
+  if(markdown.length<20)throw new SyncError('掘金草稿正文为空或过短','content','content');
+  return{title:draft?.title?.trim()||'',markdown,tags:(draft?.tags||[]).map(tag=>tag.tag_name||'').filter(Boolean),cover:draft?.cover_image||undefined};
+}
+
+/** 新文章（已知掘金草稿 ID）直接读取草稿详情，用于重试时回填被瘦身的正文。 */
+export async function fetchJuejinDraftByDraftId(draftId:string,uuid:string,titleFallback=''):Promise<Article>{
+  const content=await fetchDraftContent(draftId,uuid);
+  return{
+    id:draftId,
+    sourceDraftId:draftId,
+    title:content.title||titleFallback,
+    markdown:content.markdown,
+    tags:content.tags,
+    cover:content.cover,
+    sourceUrl:`https://juejin.cn/editor/drafts/${draftId}`
+  };
+}
+
+/** 历史文章先经 list_by_user 反查草稿 ID，再读取原始 Markdown。 */
 export async function fetchJuejinDraftByArticleId(articleId:string,uuid:string,titleFallback=''):Promise<Article>{
   const pageSize=100;
   let entry:ArticleListItem|undefined;
@@ -37,20 +64,15 @@ export async function fetchJuejinDraftByArticleId(articleId:string,uuid:string,t
     if(entry||articles.length<pageSize)break;
   }
   const draftId=entry?.article_info?.draft_id;
-  if(!draftId)throw new Error('未在掘金创作者文章中找到对应草稿');
-
-  const detail=await post<DraftDetail>('/article_draft/detail',{draft_id:String(draftId)},uuid);
-  const draft=detail.article_draft;
-  const markdown=draft?.mark_content?.trim()||'';
-  if(markdown.length<20)throw new Error('掘金草稿正文为空或过短');
-
+  if(!draftId)throw new SyncError('未在掘金创作者文章中找到对应草稿','platform-change','content');
+  const content=await fetchDraftContent(String(draftId),uuid);
   return{
     id:articleId,
     sourceDraftId:String(draftId),
-    title:draft?.title?.trim()||entry?.article_info?.title?.trim()||titleFallback,
-    markdown,
-    tags:(draft?.tags||entry?.tags||[]).map(tag=>tag.tag_name||'').filter(Boolean),
-    cover:draft?.cover_image||entry?.article_info?.cover_image||undefined,
+    title:content.title||entry?.article_info?.title?.trim()||titleFallback,
+    markdown:content.markdown,
+    tags:content.tags.length?content.tags:(entry?.tags||[]).map(tag=>tag.tag_name||'').filter(Boolean),
+    cover:content.cover||entry?.article_info?.cover_image||undefined,
     sourceUrl:`https://juejin.cn/post/${articleId}`
   };
 }

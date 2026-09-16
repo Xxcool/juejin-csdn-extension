@@ -42,8 +42,40 @@
       ]
     },
     "condition": {
-      "urlFilter": "||api.juejin.cn/",
+      "urlFilter": "||api.juejin.cn/content_api/v1/article/list_by_user",
       "excludedInitiatorDomains": ["juejin.cn"],
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  },
+  {
+    "id": 6,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {"header": "Origin", "operation": "set", "value": "https://juejin.cn"},
+        {"header": "Referer", "operation": "set", "value": "https://juejin.cn/"}
+      ]
+    },
+    "condition": {
+      "urlFilter": "||api.juejin.cn/content_api/v1/article_draft/detail",
+      "excludedInitiatorDomains": ["juejin.cn"],
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  },
+  {
+    "id": 7,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {"header": "Origin", "operation": "set", "value": "https://editor.csdn.net"},
+        {"header": "Referer", "operation": "set", "value": "https://editor.csdn.net/"}
+      ]
+    },
+    "condition": {
+      "urlFilter": "||bizapi.csdn.net/blog-console-api/v3/editor/getArticle",
+      "excludedInitiatorDomains": ["csdn.net"],
       "resourceTypes": ["xmlhttprequest"]
     }
   },

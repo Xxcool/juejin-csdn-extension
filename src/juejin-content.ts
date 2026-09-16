@@ -3,7 +3,7 @@ import type {Article} from './types';
 import {extractArticleId} from './source/juejin-api';
 
 type LoginState='checking'|'logged-in'|'logged-out'|'error';
-type EditorSnapshot={title:string;markdown:string;draftId:string;sourceUrl:string};
+type EditorSnapshot={title:string;markdown:string;draftId:string;sourceUrl:string;tags?:string[]};
 
 const READ_EDITOR_EVENT='article-ferry:read-editor';
 const SNAPSHOT_ATTRIBUTE='data-article-ferry-editor';
@@ -26,6 +26,18 @@ function getNewEditorContext(){
   return draftButton?{rightBox,publishPopup,draftButton}:null;
 }
 
+/** 发布面板标签区的兜底读取：主世界缓存未命中时从面板 DOM 提取已选标签，失败返回空数组。 */
+function readSelectedTagsFromDom():string[]{
+  const popup=document.querySelector<HTMLElement>('.publish-popup');
+  if(!popup)return[];
+  const tags=[...popup.querySelectorAll<HTMLElement>('[class*="tag"]')]
+    .filter(element=>typeof element.className==='string'&&/(?:^|[-\s])(?:active|selected|checked)(?:[-\s]|$)/i.test(element.className))
+    .filter(element=>!element.querySelector('[class*="tag"]'))
+    .map(element=>element.textContent?.trim()||'')
+    .filter(text=>text.length>=1&&text.length<=30);
+  return[...new Set(tags)];
+}
+
 function readEditorArticle():Article{
   document.documentElement.removeAttribute(SNAPSHOT_ATTRIBUTE);
   document.dispatchEvent(new Event(READ_EDITOR_EVENT));
@@ -39,7 +51,7 @@ function readEditorArticle():Article{
     sourceDraftId:snapshot.draftId||undefined,
     title:snapshot.title.trim(),
     markdown:snapshot.markdown,
-    tags:[],
+    tags:snapshot.tags?.length?snapshot.tags:readSelectedTagsFromDom(),
     sourceUrl:snapshot.sourceUrl
   };
 }
@@ -219,13 +231,21 @@ function inject(){
   injectHistoryMenus();
 }
 
+/** 把页面请求中的掘金标识上报后台，供任务重试时反查草稿正文使用。 */
+function reportJuejinUuid(){
+  const uuid=getJuejinUuid();
+  if(uuid)void chrome.runtime.sendMessage({type:'REPORT_JUEJIN_UUID',uuid}).catch(()=>{});
+}
+
 chrome.runtime.sendMessage({type:'GET_SETTINGS'}).then(result=>{
   autoDefault=result?.settings?.autoSyncAfterPublish!==false;
+  reportJuejinUuid();
   inject();
   new MutationObserver(inject).observe(document.documentElement,{childList:true,subtree:true,characterData:true});
 });
 
 window.addEventListener('focus',()=>{
+  reportJuejinUuid();
   void updateCsdnState();
   void resumePendingHistory();
 });

@@ -22,3 +22,19 @@ export async function mapConcurrent<T,R>(items:T[],limit:number,worker:(item:T,i
   await Promise.all(Array.from({length:Math.min(Math.max(1,limit),items.length)},consume));
   return results;
 }
+
+/** 全局并发闸门：限制同时执行的同步任务数，避免批量重试时图片并发冲垮平台限流。 */
+export class Semaphore{
+  private active=0;
+  private readonly waiters:(()=>void)[]=[];
+  constructor(readonly limit:number){}
+  async run<T>(operation:()=>Promise<T>):Promise<T>{
+    while(this.active>=this.limit)await new Promise<void>(resolve=>this.waiters.push(resolve));
+    this.active++;
+    try{return await operation();}
+    finally{
+      this.active--;
+      this.waiters.shift()?.();
+    }
+  }
+}
