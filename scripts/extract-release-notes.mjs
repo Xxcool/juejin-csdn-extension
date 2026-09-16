@@ -23,9 +23,9 @@ export function extractReleaseNotes(targetVersion, changelogPath = 'CHANGELOG.md
     return defaultNotes(cleanVersion);
   }
 
-  // 匹配形如 ## [0.4.1] - 2026-09-01 或 ## 0.4.1 的版本区块
+  // 匹配形如 ## [0.4.1] - 2026-09-01 或 ## 0.4.1 的版本区块，遇下一个 ## 标题或文末停止
   const escapedVersion = cleanVersion.replace(/\./g, '\\.');
-  const regex = new RegExp(`##\\s+\\[?v?${escapedVersion}\\]?[^\\n]*\\n([\\s\\S]*?)(?=\\n##\\s+\\[|$)`);
+  const regex = new RegExp(`##\\s+\\[?v?${escapedVersion}\\]?[^\\n]*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`);
   const match = changelog.match(regex);
 
   if (!match || !match[1].trim()) {
