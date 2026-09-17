@@ -1,5 +1,5 @@
 // 掘金页面集成：新文章确认发布时立即同步 Markdown，并在本人文章列表菜单中提供历史同步入口。
-import type {Article} from './types';
+import type {Article,SyncTask} from './types';
 import {extractArticleId} from './source/juejin-api';
 
 type LoginState='checking'|'logged-in'|'logged-out'|'error';
@@ -163,7 +163,7 @@ function setHistoryButtonState(button:HTMLElement,state:'idle'|'working'|'login'
   if(label)label.textContent=state==='working'?'正在同步…':state==='login'?'登录后继续同步':state==='saved'?'已保存到 CSDN ✓':state==='updated'?'已更新 CSDN 草稿 ✓':message||'同步到 CSDN';
 }
 
-async function syncHistoryArticle(button:HTMLLIElement){
+async function syncHistoryArticle(button:HTMLElement){
   if(button.dataset.state==='working')return;
   setHistoryButtonState(button,'working');
   const articleId=button.dataset.articleId!;
@@ -181,10 +181,49 @@ async function syncHistoryArticle(button:HTMLLIElement){
     }
     if(!result?.ok)throw new Error(result?.message||'同步失败');
     setHistoryButtonState(button,result.updated?'updated':'saved');
+    rememberSynced(articleId);
   }catch(error){
     setHistoryButtonState(button,'idle');
     alert(`文章摆渡：${(error as Error).message}`);
   }
+}
+
+/** 页面级缓存：已成功同步到 CSDN 的掘金文章 ID，用于刷新后恢复按钮「已保存」状态。 */
+let syncedIds:Promise<Set<string>>|undefined;
+function syncedArticleIds(){
+  if(!syncedIds){
+    try{
+      syncedIds=chrome.runtime.sendMessage({type:'GET_TASKS'}).then(result=>{
+        const ids=new Set<string>();
+        for(const task of((result?.tasks||[]) as SyncTask[])){
+          if(task.status!=='saved')continue;
+          if(task.article?.id)ids.add(task.article.id);
+          const sourceId=task.article?.sourceUrl?extractArticleId(task.article.sourceUrl):'';
+          if(sourceId)ids.add(sourceId);
+        }
+        return ids;
+      }).catch(()=>{
+        syncedIds=undefined;
+        return new Set<string>();
+      });
+    }catch{
+      // 扩展上下文失效（扩展已重载而页面未刷新）会同步抛错：静默降级且不缓存，后续注入可重试
+      return Promise.resolve(new Set<string>());
+    }
+  }
+  return syncedIds;
+}
+
+function rememberSynced(articleId:string){void syncedArticleIds().then(ids=>ids.add(articleId));}
+
+/** 注入后按任务历史恢复已同步按钮状态，仍可点击重新更新草稿。 */
+async function markSyncedButtons(){
+  const buttons=document.querySelectorAll<HTMLElement>('.jc-history-sync,.jc-creator-sync');
+  if(!buttons.length)return;
+  const ids=await syncedArticleIds();
+  buttons.forEach(button=>{
+    if(button.dataset.state==='idle'&&ids.has(button.dataset.articleId||''))setHistoryButtonState(button,'saved');
+  });
 }
 
 function injectHistoryMenus(){
@@ -212,6 +251,44 @@ function injectHistoryMenus(){
   });
 }
 
+/** 创作者中心文章管理页：byte-dropdown 菜单按需挂载无法注入，改为在更多图标旁注入独立同步按钮。 */
+function injectCreatorCenterSync(){
+  if(!location.pathname.startsWith('/creator/content/article'))return;
+  document.querySelectorAll<HTMLElement>('.byte-dropdown').forEach(dropdown=>{
+    const cell=dropdown.parentElement;
+    if(!cell||cell.querySelector('.jc-creator-sync'))return;
+    // 行结构实测：整卡是 <a href="/post/..."> 包裹 .essay-list/.first-line（含 byte-dropdown），
+    // 文章链接是祖先而非后代；向上查找时一旦进入含多个下拉的容器立即停止，避免误取他行链接
+    let row:HTMLElement|null=dropdown;
+    let link:HTMLAnchorElement|null=null;
+    while(row&&row!==document.body){
+      if(row.querySelectorAll('.byte-dropdown').length>1)break;
+      if(row instanceof HTMLAnchorElement&&row.href.includes('/post/')){link=row;break;}
+      link=row.querySelector('a[href*="/post/"]');
+      if(link)break;
+      row=row.parentElement;
+    }
+    if(!link)return;
+    const articleId=extractArticleId(link.href);
+    if(!articleId)return;
+    const title=link.getAttribute('title')||link.querySelector<HTMLElement>('.title')?.textContent?.trim()||'';
+    const button=document.createElement('button');
+    button.type='button';
+    button.className='jc-creator-sync';
+    button.dataset.articleId=articleId;
+    if(title)button.dataset.title=title;
+    button.dataset.state='idle';
+    button.title='同步到 CSDN 草稿箱';
+    button.innerHTML=`${HISTORY_SYNC_ICON}<span class="jc-history-label">同步到 CSDN</span>`;
+    button.addEventListener('click',event=>{
+      event.preventDefault();
+      event.stopPropagation();
+      void syncHistoryArticle(button);
+    });
+    cell.insertBefore(button,dropdown);
+  });
+}
+
 async function resumePendingHistory(){
   try{
     const result=await chrome.runtime.sendMessage({type:'RESUME_PENDING_HISTORY'});
@@ -220,15 +297,17 @@ async function resumePendingHistory(){
       return;
     }
     if(!result.resumed)return;
-    const button=[...document.querySelectorAll<HTMLLIElement>('.jc-history-sync')]
+    const button=[...document.querySelectorAll<HTMLElement>('.jc-history-sync,.jc-creator-sync')]
       .find(item=>item.dataset.articleId===String(result.articleId));
-    if(button)setHistoryButtonState(button,'saved');
+    if(button){setHistoryButtonState(button,'saved');rememberSynced(String(result.articleId));}
   }catch{}
 }
 
 function inject(){
   injectEditorIntegration();
   injectHistoryMenus();
+  injectCreatorCenterSync();
+  void markSyncedButtons();
 }
 
 /** 防抖注入：编辑器 SPA 高频 DOM 变更时归并为单次扫描，避免 querySelectorAll 密集执行。 */
@@ -256,4 +335,6 @@ window.addEventListener('focus',()=>{
   reportJuejinUuid();
   void updateCsdnState();
   void resumePendingHistory();
+  syncedIds=undefined;
+  void markSyncedButtons();
 });

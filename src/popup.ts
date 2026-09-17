@@ -153,7 +153,7 @@ async function loadTasks(){
         <p class="empty-desc">${all.length?'可尝试切换上方的状态筛选条件。':'在掘金发布新文章时勾选同步，或在文章列表点击「同步到 CSDN」即可自动生成草稿。'}</p>
         ${all.length?'':'<button id="btn-goto-juejin" class="empty-action">前往掘金文章管理 ↗</button>'}
       </div>`;
-      $('#btn-goto-juejin')?.addEventListener('click',()=>void chrome.tabs.create({url:'https://juejin.cn/creator/content/article',active:true}));
+      $('#btn-goto-juejin')?.addEventListener('click',()=>void chrome.tabs.create({url:'https://juejin.cn/creator/content/article/essays?status=all',active:true}));
       return;
     }
     list.innerHTML=tasks.map(taskCard).join('');
