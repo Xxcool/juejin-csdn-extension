@@ -21,11 +21,13 @@ const labels:Record<TaskStatus,string>={
   writing:'保存草稿'
 };
 
+let toastTimer=0;
 function toast(message:string){
   const element=$('#toast');
   element.textContent=message;
   element.classList.add('show');
-  setTimeout(()=>element.classList.remove('show'),2400);
+  clearTimeout(toastTimer);
+  toastTimer=window.setTimeout(()=>element.classList.remove('show'),2400);
 }
 
 function switchTab(tab:'history'|'settings'){
@@ -35,8 +37,12 @@ function switchTab(tab:'history'|'settings'){
     button.classList.toggle('active',isActive);
     button.setAttribute('aria-selected',String(isActive));
   });
-  $('#pane-history').classList.toggle('active',tab==='history');
-  $('#pane-settings').classList.toggle('active',tab==='settings');
+  const historyPane=$('#pane-history');
+  const settingsPane=$('#pane-settings');
+  historyPane.classList.toggle('active',tab==='history');
+  settingsPane.classList.toggle('active',tab==='settings');
+  historyPane.hidden=tab!=='history';
+  settingsPane.hidden=tab!=='settings';
   if(tab==='history')void loadTasks();
   if(tab==='settings')void loadSettings();
 }
@@ -112,7 +118,7 @@ function taskCard(task:SyncTask){
   const diagnostic=task.diagnostic?`<div class="task-diagnostic"><div class="diagnostic-header"><b>${categoryLabels[task.diagnostic.category]} · ${stageLabels[task.diagnostic.stage]}</b><button class="btn-copy-diag" data-copy-diag="${escapeHtml(diagText)}">复制诊断</button></div><span>${escapeHtml(task.diagnostic.suggestion)}</span></div>`:'';
   const warning=task.warnings?.length?`<p class="platform-warning" title="${escapeHtml(task.warnings.join('\n'))}">${escapeHtml(task.warnings.join('；'))}</p>`:'';
   const stats=task.stats?`<p class="task-stats">耗时 ${formatDuration(task.stats.durationMs)}<i>·</i>图片 ${task.stats.imageSucceeded}/${task.stats.imageTotal} 成功${task.stats.imageFailed?`，${task.stats.imageFailed} 失败`:''}</p>`:'';
-  const progress=task.progress?`<p class="task-progress"><span style="width:${task.progress.total?Math.round(task.progress.current/task.progress.total*100):12}%"></span></p>`:'';
+  const progress=task.progress?`<p class="task-progress"><span style="width:${task.progress.total?Math.min(100,Math.max(0,Math.round(task.progress.current/task.progress.total*100))):12}%"></span></p>`:'';
   return`<details class="history-card" open>
     <summary>
       <span class="history-cover">${cover}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h8l4 4V20.5H6zM14 3.5v4h4M9 12h6M9 15.5h6"/></svg></span>

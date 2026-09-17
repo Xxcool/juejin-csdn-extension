@@ -231,6 +231,14 @@ function inject(){
   injectHistoryMenus();
 }
 
+/** 防抖注入：编辑器 SPA 高频 DOM 变更时归并为单次扫描，避免 querySelectorAll 密集执行。 */
+let injectScheduled=false;
+function scheduleInject(){
+  if(injectScheduled)return;
+  injectScheduled=true;
+  requestAnimationFrame(()=>{injectScheduled=false;inject();});
+}
+
 /** 把页面请求中的掘金标识上报后台，供任务重试时反查草稿正文使用。 */
 function reportJuejinUuid(){
   const uuid=getJuejinUuid();
@@ -241,7 +249,7 @@ chrome.runtime.sendMessage({type:'GET_SETTINGS'}).then(result=>{
   autoDefault=result?.settings?.autoSyncAfterPublish!==false;
   reportJuejinUuid();
   inject();
-  new MutationObserver(inject).observe(document.documentElement,{childList:true,subtree:true,characterData:true});
+  new MutationObserver(scheduleInject).observe(document.documentElement,{childList:true,subtree:true});
 });
 
 window.addEventListener('focus',()=>{

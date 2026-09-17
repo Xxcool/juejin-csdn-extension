@@ -1,9 +1,12 @@
 import type {CsdnDraftMapping,ExtensionSettings,SyncTask} from '../types';
 import {defaultSettings,normalizeSettings} from './settings';
 import {articleIdentityKeys} from './task';
+import {Semaphore} from './async';
 const KEY='syncTasks';
 const SETTINGS_KEY='settings';
 const MAPPING_PREFIX='csdnDraftMapping:';
+/** 读-改-写互斥锁：序列化对 syncTasks 键的存取，防止 Semaphore(2) 并发下交错覆盖。 */
+const storageMutex=new Semaphore(1);
 
 /** 持久化前剔除文章正文：任务历史仅保留元信息，防止 storage.local 冲破配额；重试时经掘金双路径回填。 */
 export function toStorageTask(task:SyncTask):SyncTask{
@@ -56,7 +59,7 @@ export async function deleteTask(id:string){
   if(task?.csdnArticleId)await saveArticleDraftMapping(task.article,task.csdnArticleId,task.draftUrl);
   await saveTasks(tasks.filter(item=>item.id!==id));
 }
-export async function putTask(task:SyncTask){const tasks=await allTasks();const i=tasks.findIndex(x=>x.id===task.id);if(i>=0)tasks[i]=task;else tasks.unshift(task);await saveTasks(tasks);}
-export async function patchTask(id:string,patch:Partial<SyncTask>){const tasks=await allTasks();const task=tasks.find(x=>x.id===id);if(!task)return;Object.assign(task,patch,{updatedAt:new Date().toISOString()});await saveTasks(tasks);return task;}
+export async function putTask(task:SyncTask){await storageMutex.run(async()=>{const tasks=await allTasks();const i=tasks.findIndex(x=>x.id===task.id);if(i>=0)tasks[i]=task;else tasks.unshift(task);await saveTasks(tasks);});}
+export async function patchTask(id:string,patch:Partial<SyncTask>){return storageMutex.run(async()=>{const tasks=await allTasks();const task=tasks.find(x=>x.id===id);if(!task)return;Object.assign(task,patch,{updatedAt:new Date().toISOString()});await saveTasks(tasks);return task;});}
 export async function getSettings(){return normalizeSettings({...defaultSettings,...((await chrome.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY]||{})});}
 export async function saveSettings(settings:ExtensionSettings){await chrome.storage.local.set({[SETTINGS_KEY]:normalizeSettings(settings)});}
