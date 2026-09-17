@@ -2,12 +2,12 @@
 
 新增目标平台时，请实现独立适配器并保持“登录检测、内容转换、图片处理、草稿写入、结果链接”职责边界。不要提交账号凭据、Cookie、平台私有数据或直接复制第三方扩展源码。
 
-提交前运行：
+提交前请确保本地全量通过：
 
 ```bash
-npm run check
-npm test
-npm run build:release
+npm run check          # TypeScript 类型检查
+npm test               # 全量自动化单元测试
+npm run build:release  # 生产环境产物打包
 ```
 
 发布版本前还需要运行 `npm run release:zip`，确认生成的 ZIP 根目录直接包含 `manifest.json`。新增站点权限或请求头规则时，请在 PR 中说明最小权限范围及其必要性。
