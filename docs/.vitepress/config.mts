@@ -8,6 +8,7 @@ export default defineConfig({
   description: '面向技术创作者的端侧安全内容摆渡中枢 · 一处专注写作，优雅摆渡全网阵地',
   base,
   cleanUrls: true,
+  ignoreDeadLinks: true,
   lastUpdated: true,
   vite: {
     css: {

@@ -82,7 +82,7 @@ jobs:
 
 Vercel 提供全球边缘 Anycast CDN 加速与秒级构建，支持自动化拉取 GitHub 仓库并在每次提交或提 PR 时自动部署。
 
-由于项目根目录已预设工业级 [`vercel.json`](file:///Users/xiabin/Documents/juejin-csdn-extension/vercel.json) 规范，部署过程为 **100% 零配置开箱即用**：
+由于项目根目录已预设工业级 `vercel.json` 规范，部署过程为 **100% 零配置开箱即用**：
 
 ### 极速接入步骤
 
