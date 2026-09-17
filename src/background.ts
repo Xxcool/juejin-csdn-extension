@@ -1,6 +1,6 @@
 // 扩展后台协调器：管理登录状态、同步任务和 CSDN 草稿写入。
 import {Semaphore} from './core/async';
-import {allTasks,deleteTask,getArticleDraftMapping,getSettings,migrateStoredTasks,patchTask,preserveTaskMappings,putTask,saveArticleDraftMapping,saveSettings,saveTasks} from './core/store';
+import {allTasks,clearAllTasks,deleteTask,getArticleDraftMapping,getSettings,migrateStoredTasks,patchTask,preserveTaskMappings,putTask,saveArticleDraftMapping,saveSettings,saveTasks} from './core/store';
 import {canDeleteTask,extractCsdnArticleId,findMatchingTask,isActiveTask,isInterruptedTask,isRetryableTask,isUncertainCreateTask} from './core/task';
 import {SyncError,classifySyncError} from './core/diagnostic';
 import {isSupportedMessage} from './core/message';
@@ -200,9 +200,7 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
       else if(runningTasks.has(task.id)||!canDeleteTask(task)){reply({ok:false,message:'进行中的任务不能删除'});}
       else{await deleteTask(task.id);reply({ok:true});}
     }else if(message.type==='CLEAR_TASKS'){
-      const tasks=await allTasks();
-      await preserveTaskMappings(tasks);
-      await saveTasks([]);
+      await clearAllTasks();
       reply({ok:true});
     }
   })().catch(error=>reply({ok:false,message:error.message}));

@@ -53,13 +53,14 @@ export async function getArticleDraftMapping(article:SyncTask['article']){
 export async function preserveTaskMappings(tasks:SyncTask[]){
   for(const task of tasks)if(task.csdnArticleId)await saveArticleDraftMapping(task.article,task.csdnArticleId,task.draftUrl);
 }
-export async function deleteTask(id:string){
+export async function deleteTask(id:string){await storageMutex.run(async()=>{
   const tasks=await allTasks();
   const task=tasks.find(item=>item.id===id);
   if(task?.csdnArticleId)await saveArticleDraftMapping(task.article,task.csdnArticleId,task.draftUrl);
   await saveTasks(tasks.filter(item=>item.id!==id));
-}
+});}
 export async function putTask(task:SyncTask){await storageMutex.run(async()=>{const tasks=await allTasks();const i=tasks.findIndex(x=>x.id===task.id);if(i>=0)tasks[i]=task;else tasks.unshift(task);await saveTasks(tasks);});}
 export async function patchTask(id:string,patch:Partial<SyncTask>){return storageMutex.run(async()=>{const tasks=await allTasks();const task=tasks.find(x=>x.id===id);if(!task)return;Object.assign(task,patch,{updatedAt:new Date().toISOString()});await saveTasks(tasks);return task;});}
+export async function clearAllTasks(){await storageMutex.run(async()=>{const tasks=await allTasks();await preserveTaskMappings(tasks);await saveTasks([]);});}
 export async function getSettings(){return normalizeSettings({...defaultSettings,...((await chrome.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY]||{})});}
 export async function saveSettings(settings:ExtensionSettings){await chrome.storage.local.set({[SETTINGS_KEY]:normalizeSettings(settings)});}
