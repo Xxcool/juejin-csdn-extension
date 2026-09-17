@@ -4,9 +4,8 @@ import path from 'node:path';
 
 const categoryIcons = [
   { match: /新增|新功能|feat/i, icon: '✨' },
-  { match: /修复|fix/i, icon: '⚒' },
-  { match: /改进|优化|perf|enhance|refactor/i, icon: '🛠' },
-  { match: /界面|UI|UX|体验|样式/i, icon: '🎨' },
+  { match: /修复|fix/i, icon: '🛠️' },
+  { match: /改进|优化|perf|enhance|refactor/i, icon: '🛠️' },
   { match: /工程|发布|构建|ci|infra|workflow/i, icon: '📦' },
   { match: /安全|security/i, icon: '🔒' },
   { match: /测试|test/i, icon: '🧪' },
@@ -43,29 +42,26 @@ function formatNotes(rawNotes, version) {
   for (const line of lines) {
     const headerMatch = line.match(/^###\s+(.*)/);
     if (headerMatch) {
-      const title = headerMatch[1].trim();
-      const found = categoryIcons.find(c => c.match.test(title));
-      if (found) {
-        currentIcon = found.icon;
-        resultLines.push(`### ${found.icon} ${title}`);
-      } else {
-        currentIcon = '📌';
-        resultLines.push(`### 📌 ${title}`);
-      }
+      const rawTitle = headerMatch[1].trim();
+      // 移除原标题可能带有的 emoji 与空白，防止出现形如 ### ✨ ✨ 新增
+      const cleanTitle = rawTitle.replace(/^[\p{Extended_Pictographic}\u2000-\u3300\ufe0f\s]+/u, '').trim();
+      const found = categoryIcons.find(c => c.match.test(cleanTitle || rawTitle));
+      const icon = found ? found.icon : '📌';
+      currentIcon = icon;
+      resultLines.push(`### ${icon} ${cleanTitle || rawTitle}`);
       continue;
     }
 
     const bulletMatch = line.match(/^(\s*[-*]\s+)(.*)/);
     if (bulletMatch) {
       const indent = bulletMatch[1];
-      const text = bulletMatch[2].trim();
-      // 如果条目还没有 emoji 开头，补上当前分类的 emoji (排除纯数字、#、* 开头避免误判)
-      if (!/^(?![0-9#*])[\p{Extended_Pictographic}\u2000-\u3300]/u.test(text)) {
-        resultLines.push(`${indent}${currentIcon} ${text}`);
-      } else {
-        resultLines.push(line);
-      }
+      let text = bulletMatch[2].trim();
 
+      // 剔除历史混入的 🎨
+      text = text.replace(/^🎨\s*/, '');
+
+      // 保持条目干净清晰，不重复添加 emoji
+      resultLines.push(`${indent}${text}`);
       continue;
     }
 
