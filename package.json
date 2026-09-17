@@ -3,20 +3,15 @@
   "version": "0.6.0",
   "private": true,
   "description": "面向技术创作者的端侧安全内容摆渡中枢 · 一处专注写作，优雅摆渡全网阵地",
-  "homepage": "https://juejin-csdn-extension.vercel.app",
+  "homepage": "https://ferry-site.vercel.app",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/Xxcool/juejin-csdn-extension.git"
   },
   "type": "module",
-  "allowScripts": {
-    "esbuild": true,
-    "vue-demi": true
-  },
   "scripts": {
-    "build": "npm run docs:build",
-    "build:ext": "node build.mjs",
+    "build": "node build.mjs",
     "build:release": "node build.mjs --release",
     "check": "tsc --noEmit",
     "test": "vitest run",
@@ -24,9 +19,7 @@
     "release:zip": "npm run check && npm test && npm run build:release && node scripts/package-release.mjs",
     "release:notes": "node scripts/extract-release-notes.mjs",
     "docs:dev": "vitepress dev docs",
-    "docs:build": "vitepress build docs && mkdir -p .vitepress/dist && cp -r docs/.vitepress/dist/* .vitepress/dist/",
-    "docs:preview": "vitepress preview docs",
-    "vercel-build": "npm run docs:build"
+    "docs:build": "vitepress build docs"
   },
   "devDependencies": {
     "@types/archiver": "^8.0.0",

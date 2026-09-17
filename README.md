@@ -3,12 +3,12 @@
   <h1>⛵ 文章摆渡 (Article Ferry)</h1>
   <p><b>面向技术创作者的端侧安全内容摆渡中枢 · 一处专注写作，优雅摆渡全网阵地</b></p>
   <p>
-    <a href="https://juejin-csdn-extension.vercel.app"><b>🌐 官方网站 & 在线文档 (Vercel)</b></a> &nbsp;|&nbsp;
-    <a href="https://xxcool.github.io/juejin-csdn-extension/">GitHub Pages 镜像</a> &nbsp;|&nbsp;
+    <a href="https://ferry-site.vercel.app"><b>🌐 官方网站 & 在线文档 (Vercel)</b></a> &nbsp;|&nbsp;
+    <a href="https://github.com/Xxcool/ferry-site">网站开源仓库</a> &nbsp;|&nbsp;
     <a href="https://github.com/Xxcool/juejin-csdn-extension/releases">下载离线安装包</a>
   </p>
 
-  [![Website](https://img.shields.io/badge/Website-Vercel%20Official-1D7DFA?logo=vercel)](https://juejin-csdn-extension.vercel.app)
+  [![Website](https://img.shields.io/badge/Website-ferry--site.vercel.app-1D7DFA?logo=vercel)](https://ferry-site.vercel.app)
   [![Release](https://img.shields.io/github/v/release/Xxcool/juejin-csdn-extension?color=blue&label=Release)](https://github.com/Xxcool/juejin-csdn-extension/releases)
   [![Manifest V3](https://img.shields.io/badge/Chrome%20Extension-Manifest%20V3-success)](https://developer.chrome.com/docs/extensions/mv3/intro/)
   [![Tests](https://img.shields.io/badge/Tests-41%2F41%20Passed-brightgreen)](https://github.com/Xxcool/juejin-csdn-extension/actions)
@@ -51,7 +51,7 @@
 * **同步前排版预演 (Dry-run)**：任务卡片支持一键预演，静态分析字数、外链图片、分类命中与特有容器，**全程不写草稿、不传图片**，从源头避免产生测试废稿；
 * **CSDN 专栏动态拉取**：设置页默认分类实时拉取当前登录账号的已有专栏（datalist 下拉建议），告别手动打字；
 * **正文摘要自动生成**：优先读取掘金作者手填摘要，缺失时自动提取正文前 100 字纯文本写入 CSDN 编辑器；
-* **掘金首发声明注入**：文章末尾自动注入 `> 本文首发于掘金：[文章标题](链接)`，保障多平台 SEO 权重与原创权益。
+* **掘金首发声明注入**：文章末尾自动注入 `> 本文首发于掘金：文章标题 (原文链接)`，保障多平台 SEO 权重与原创权益。
 
 ### 🖼️ 高清图床转存与语法清洗
 * **无水印原图直链提取**：智能剔除掘金 CDN 图片的 `~tplv-` 模板与 OSS 裁剪水印参数，转存纯净原图；
