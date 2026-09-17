@@ -3,7 +3,7 @@
   <h1>⛵ 文章摆渡 (Article Ferry)</h1>
   <p><b>面向技术创作者的端侧安全内容摆渡中枢 · 一处专注写作，优雅摆渡全网阵地</b></p>
   <p>
-    <a href="https://artferry.vercel.app"><b>🌐 官方网站 & 在线文档 (Vercel)</b></a> &nbsp;|&nbsp;
+    <a href="https://artferry.vercel.app">在线文档</a> &nbsp;|&nbsp;
     <a href="https://github.com/Xxcool/juejin-csdn-extension/releases">下载离线安装包</a>
   </p>
 
