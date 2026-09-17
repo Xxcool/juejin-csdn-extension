@@ -3,7 +3,7 @@
   "version": "0.6.0",
   "private": true,
   "description": "面向技术创作者的端侧安全内容摆渡中枢 · 一处专注写作，优雅摆渡全网阵地",
-  "homepage": "https://ferry-site-seven.vercel.app",
+  "homepage": "https://artferry.vercel.app",
   "license": "MIT",
   "repository": {
     "type": "git",

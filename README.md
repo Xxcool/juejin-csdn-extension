@@ -3,11 +3,11 @@
   <h1>⛵ 文章摆渡 (Article Ferry)</h1>
   <p><b>面向技术创作者的端侧安全内容摆渡中枢 · 一处专注写作，优雅摆渡全网阵地</b></p>
   <p>
-    <a href="https://ferry-site-seven.vercel.app"><b>🌐 官方网站 & 在线文档 (Vercel)</b></a> &nbsp;|&nbsp;
+    <a href="https://artferry.vercel.app"><b>🌐 官方网站 & 在线文档 (Vercel)</b></a> &nbsp;|&nbsp;
     <a href="https://github.com/Xxcool/juejin-csdn-extension/releases">下载离线安装包</a>
   </p>
 
-  [![Website](https://img.shields.io/badge/Website-ferry--site--seven.vercel.app-1D7DFA?logo=vercel)](https://ferry-site-seven.vercel.app)
+  [![Website](https://img.shields.io/badge/Website-artferry.vercel.app-1D7DFA?logo=vercel)](https://artferry.vercel.app)
   [![Release](https://img.shields.io/github/v/release/Xxcool/juejin-csdn-extension?color=blue&label=Release)](https://github.com/Xxcool/juejin-csdn-extension/releases)
   [![Manifest V3](https://img.shields.io/badge/Chrome%20Extension-Manifest%20V3-success)](https://developer.chrome.com/docs/extensions/mv3/intro/)
   [![Tests](https://img.shields.io/badge/Tests-41%2F41%20Passed-brightgreen)](https://github.com/Xxcool/juejin-csdn-extension/actions)
