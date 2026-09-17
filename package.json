@@ -1,1 +1,38 @@
-{"name":"juejin-csdn-extension","version":"0.6.0","private":true,"description":"将掘金文章同步保存到 CSDN 草稿箱的 Chrome 扩展","license":"MIT","repository":{"type":"git","url":"https://github.com/Xxcool/juejin-csdn-extension.git"},"type":"module","scripts":{"build":"node build.mjs","build:release":"node build.mjs --release","check":"tsc --noEmit","test":"vitest run","dev":"node build.mjs --watch","release:zip":"npm run check && npm test && npm run build:release && node scripts/package-release.mjs","release:notes":"node scripts/extract-release-notes.mjs"},"devDependencies":{"@types/archiver":"^8.0.0","@types/chrome":"^0.0.326","archiver":"^8.0.0","esbuild":"^0.25.9","typescript":"^5.9.2","vitest":"^4.1.11"},"dependencies":{"marked":"^18.0.11"}}
+{
+  "name": "juejin-csdn-extension",
+  "version": "0.6.0",
+  "private": true,
+  "description": "面向技术创作者的端侧安全内容摆渡中枢 · 一处专注写作，优雅摆渡全网阵地",
+  "homepage": "https://juejin-csdn-extension.vercel.app",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Xxcool/juejin-csdn-extension.git"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "build:release": "node build.mjs --release",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "dev": "node build.mjs --watch",
+    "release:zip": "npm run check && npm test && npm run build:release && node scripts/package-release.mjs",
+    "release:notes": "node scripts/extract-release-notes.mjs",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs",
+    "vercel-build": "npm run docs:build"
+  },
+  "devDependencies": {
+    "@types/archiver": "^8.0.0",
+    "@types/chrome": "^0.0.326",
+    "archiver": "^8.0.0",
+    "esbuild": "^0.25.9",
+    "typescript": "^5.9.2",
+    "vitepress": "^1.6.4",
+    "vitest": "^4.1.11"
+  },
+  "dependencies": {
+    "marked": "^18.0.11"
+  }
+}

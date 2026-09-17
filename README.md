@@ -1,8 +1,14 @@
 <div align="center">
   <img src="assets/logo-128.png" width="96" height="96" alt="文章摆渡 Logo">
   <h1>⛵ 文章摆渡 (Article Ferry)</h1>
-  <p><b>面向技术创作者的轻量、端侧安全内容中枢 · 把掘金文章优雅可靠地摆渡到 CSDN 草稿箱</b></p>
+  <p><b>面向技术创作者的端侧安全内容摆渡中枢 · 一处专注写作，优雅摆渡全网阵地</b></p>
+  <p>
+    <a href="https://juejin-csdn-extension.vercel.app"><b>🌐 官方网站 & 在线文档 (Vercel)</b></a> &nbsp;|&nbsp;
+    <a href="https://xxcool.github.io/juejin-csdn-extension/">GitHub Pages 镜像</a> &nbsp;|&nbsp;
+    <a href="https://github.com/Xxcool/juejin-csdn-extension/releases">下载离线安装包</a>
+  </p>
 
+  [![Website](https://img.shields.io/badge/Website-Vercel%20Official-1D7DFA?logo=vercel)](https://juejin-csdn-extension.vercel.app)
   [![Release](https://img.shields.io/github/v/release/Xxcool/juejin-csdn-extension?color=blue&label=Release)](https://github.com/Xxcool/juejin-csdn-extension/releases)
   [![Manifest V3](https://img.shields.io/badge/Chrome%20Extension-Manifest%20V3-success)](https://developer.chrome.com/docs/extensions/mv3/intro/)
   [![Tests](https://img.shields.io/badge/Tests-41%2F41%20Passed-brightgreen)](https://github.com/Xxcool/juejin-csdn-extension/actions)
@@ -12,13 +18,24 @@
 
 ---
 
-## 📖 项目简介
+## 📖 项目简介 (About Article Ferry)
 
-**「文章摆渡」** 是一款基于 Chrome Manifest V3 规范打造的去中心化、端侧安全的内容同步工具。以掘金为核心创作入口，在创作者明确勾选确认后，将新发布或历史文章可靠地同步至 CSDN 草稿箱。
+**「文章摆渡」(Article Ferry)** 是一款面向现代技术博主打造的端侧安全、去中心化内容多端同步利器。
+
+在多平台内容分发的时代，创作者往往陷入反复复制粘贴、重调排版格式、忍受图床压缩水印、甚至被迫将账号凭证托管给不可信云端平台的困境。**文章摆渡** 坚持「**让技术创作更从容**」的信念，以掘金为写作主阵地，首发提供工业级可靠的 CSDN 草稿箱端到端摆渡，并正在向微信公众号、知乎专栏、博客园及个人独立博客扩展。
+
+### 为什么选择文章摆渡？
+
+| 传统妥协方案 | 文章摆渡 (Article Ferry) | 创作者收益 |
+| :--- | :--- | :--- |
+| **凭证出海**：Cookie/密码上传至第三方服务器代管 | **纯端侧零信任**：MV3 本地沙箱，0 敏感 Cookie 申请 | 账号隐私绝对安全，数据不出本地 |
+| **画质损耗**：直接复制携带裁剪参数与源站水印 | **无损原图直链**：剥离 OSS/CDN 水印，3 路退避并发 | 架构图与代码截图像素级清晰 |
+| **草稿裂变**：每次微调新增一条垃圾草稿或误覆盖 | **双身份幂等**：`article_id` 与 `draft_id` 双向状态自愈 | 400 删稿自动新建，已发布博文阻断 |
+| **暴力代发**：替用户公开提交，极易误触敏感词风控 | **人机协作底线**：止步目标平台草稿箱，绝不代发 | 终审权留在博主手中，告别封号风险 |
 
 > [!IMPORTANT]
 > **人机协作与安全原则 (Human-in-the-loop)**：  
-> 工具专注消灭 90% 的机械搬运、格式清洗与图床转存工作，**坚决不替用户公开发布**。分类、标签及最终发布确认权永远保留在目标平台草稿箱，严格敬畏平台规则与创作者资产安全。
+> 工具专注消灭 90% 的机械搬运、格式清洗与图床转存脏活，**坚决不替用户公开发布**。分类、标签及最终发布确认权永远保留在目标平台草稿箱，严格敬畏平台规则与创作者资产安全。
 
 ---
 
@@ -78,10 +95,13 @@
 git clone https://github.com/Xxcool/juejin-csdn-extension.git
 cd juejin-csdn-extension
 npm install
-npm run check    # TypeScript 严格类型检查
-npm test         # Vitest 全量单元测试 (41 tests)
-npm run build    # esbuild 生产产物打包 (输出到 dist/)
+npm run check       # TypeScript 严格类型检查
+npm test            # Vitest 全量单元测试 (41 tests)
+npm run build       # esbuild 生产产物打包 (输出到 dist/)
+npm run docs:dev    # 启动 VitePress 官网文档本地热重载调试 (http://localhost:5173)
+npm run docs:build  # 构建 VitePress 官网静态产物 (输出至 docs/.vitepress/dist)
 ```
+
 
 ---
 

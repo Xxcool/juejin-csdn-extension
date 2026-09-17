@@ -1223,58 +1223,148 @@ main {
   color: var(--text-muted);
 }
 
-/* Notice Card */
+/* Notice / About Card */
 .notice-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
   box-shadow: var(--hairline-top), var(--shadow-card);
   border-radius: 14px;
-  padding: 12px 14px;
+  padding: 13px 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .notice-title {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 650;
   color: var(--text-title);
+  letter-spacing: -0.01em;
 }
 
 .notice-title svg {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   color: var(--brand);
+  flex-shrink: 0;
 }
 
-.notice-card p {
+.about-motto {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  background: rgba(29, 125, 250, 0.05);
+  border-left: 2px solid var(--brand);
+  border-radius: 4px 6px 6px 4px;
+}
+
+.about-motto strong {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--brand);
+  letter-spacing: -0.01em;
+}
+
+.about-motto span {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.about-desc {
   font-size: 11px;
   line-height: 1.55;
   color: var(--text-muted);
   margin: 0;
 }
 
+.about-links-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.about-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 550;
+  text-decoration: none;
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid var(--border);
+  color: var(--text-body);
+  transition: all 0.15s ease;
+}
+
+.about-link-btn:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+  background: rgba(29, 125, 250, 0.06);
+  transform: translateY(-1px);
+}
+
+.about-link-btn.primary {
+  background: rgba(29, 125, 250, 0.08);
+  border-color: rgba(29, 125, 250, 0.25);
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.about-link-btn.primary:hover {
+  background: var(--brand);
+  color: #fff;
+  border-color: var(--brand);
+}
+
+.about-link-btn svg {
+  flex-shrink: 0;
+}
+
 .notice-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 6px;
+  padding-top: 8px;
   border-top: 1px solid var(--border-light);
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--text-faint);
 }
 
-.notice-footer a {
-  color: var(--brand);
-  text-decoration: none;
-  font-weight: 500;
+.about-security-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 550;
+  color: #10b981;
 }
 
-.notice-footer a:hover {
-  text-decoration: underline;
+@media (prefers-color-scheme: dark) {
+  .about-motto {
+    background: rgba(29, 125, 250, 0.12);
+  }
+  .about-link-btn {
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .about-link-btn:hover {
+    background: rgba(29, 125, 250, 0.15);
+  }
+  .about-link-btn.primary {
+    background: rgba(29, 125, 250, 0.16);
+    border-color: rgba(29, 125, 250, 0.35);
+  }
+  .about-link-btn.primary:hover {
+    background: var(--brand);
+    color: #fff;
+  }
 }
 
 /* 8. TOAST NOTIFICATION */

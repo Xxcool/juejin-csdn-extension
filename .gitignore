@@ -3,8 +3,10 @@ node_modules/
 dist/
 release/
 *.zip
+!docs/public/downloads/*.zip
 .env
 .env.*
 coverage/
 *.log
-docs/
+docs/.vitepress/dist/
+docs/.vitepress/cache/

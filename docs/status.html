@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文章摆渡 · 接口状态</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f8fafc;
+    color: #334155;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #0f1117; color: #cbd5e1; }
+  }
+  .card {
+    width: min(480px, 92vw);
+    background: #ffffff;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 16px;
+    box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.06);
+    padding: 28px;
+  }
+  @media (prefers-color-scheme: dark) {
+    .card { background: #181b22; border-color: rgba(255, 255, 255, 0.08); }
+  }
+  h1 { font-size: 18px; color: #0f172a; margin-bottom: 4px; }
+  @media (prefers-color-scheme: dark) { h1 { color: #f8fafc; } }
+  .sub { font-size: 12.5px; color: #64748b; margin-bottom: 20px; }
+  .status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: #f1f5f9;
+    margin-bottom: 10px;
+  }
+  @media (prefers-color-scheme: dark) { .status-row { background: #21262d; } }
+  .status-row b { font-size: 14px; }
+  .badge {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 99px;
+  }
+  .badge.ok { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+  .badge.degraded { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+  .badge.broken { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+  .badge.unknown { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
+  @media (prefers-color-scheme: dark) {
+    .badge.ok { background: rgba(16, 185, 129, 0.15); color: #34d399; border-color: rgba(16, 185, 129, 0.3); }
+    .badge.degraded { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border-color: rgba(245, 158, 11, 0.3); }
+    .badge.broken { background: rgba(239, 68, 68, 0.15); color: #f87171; border-color: rgba(239, 68, 68, 0.3); }
+    .badge.unknown { background: rgba(100, 116, 139, 0.15); color: #94a3b8; border-color: rgba(100, 116, 139, 0.3); }
+  }
+  .message {
+    display: none;
+    font-size: 12.5px;
+    line-height: 1.6;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background: #fffbeb;
+    color: #b45309;
+    margin-bottom: 10px;
+  }
+  @media (prefers-color-scheme: dark) { .message { background: rgba(245, 158, 11, 0.15); color: #fbbf24; } }
+  footer { font-size: 11.5px; color: #94a3b8; margin-top: 18px; line-height: 1.6; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <h1>文章摆渡 · 平台接口状态</h1>
+    <p class="sub">掘金 → CSDN 同步扩展依赖的平台接口健康状态</p>
+    <div id="message" class="message"></div>
+    <div class="status-row"><b>掘金接口</b><span id="juejin" class="badge unknown">检测中…</span></div>
+    <div class="status-row"><b>CSDN 接口</b><span id="csdn" class="badge unknown">检测中…</span></div>
+    <footer>
+      <div id="updated">状态加载中…</div>
+      <div>状态文件：<a href="https://github.com/Xxcool/juejin-csdn-extension/blob/main/health.json" target="_blank" rel="noopener">health.json</a> · 扩展每 12 小时自动检查一次</div>
+    </footer>
+  </main>
+  <script>
+    const LABELS = { ok: '正常', degraded: '部分降级', broken: '异常', unknown: '未知' };
+    fetch('https://raw.githubusercontent.com/Xxcool/juejin-csdn-extension/main/health.json')
+      .then(response => response.json())
+      .then(data => {
+        for (const key of ['csdn', 'juejin']) {
+          const el = document.getElementById(key);
+          const level = ['ok', 'degraded', 'broken'].includes(data[key]) ? data[key] : 'unknown';
+          el.textContent = LABELS[level];
+          el.className = 'badge ' + level;
+        }
+        if (data.message) {
+          const box = document.getElementById('message');
+          box.textContent = data.message;
+          box.style.display = 'block';
+        }
+        document.getElementById('updated').textContent = '最近更新：' + (data.updatedAt || '未知');
+      })
+      .catch(() => {
+        document.getElementById('updated').textContent = '状态文件暂时无法读取';
+      });
+  </script>
+</body>
+</html>
