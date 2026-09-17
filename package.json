@@ -10,8 +10,13 @@
     "url": "https://github.com/Xxcool/juejin-csdn-extension.git"
   },
   "type": "module",
+  "allowScripts": {
+    "esbuild": true,
+    "vue-demi": true
+  },
   "scripts": {
-    "build": "node build.mjs",
+    "build": "npm run docs:build",
+    "build:ext": "node build.mjs",
     "build:release": "node build.mjs --release",
     "check": "tsc --noEmit",
     "test": "vitest run",
@@ -19,7 +24,7 @@
     "release:zip": "npm run check && npm test && npm run build:release && node scripts/package-release.mjs",
     "release:notes": "node scripts/extract-release-notes.mjs",
     "docs:dev": "vitepress dev docs",
-    "docs:build": "vitepress build docs",
+    "docs:build": "vitepress build docs && mkdir -p .vitepress/dist && cp -r docs/.vitepress/dist/* .vitepress/dist/",
     "docs:preview": "vitepress preview docs",
     "vercel-build": "npm run docs:build"
   },

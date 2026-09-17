@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/logo-128.png" width="96" height="96" alt="文章摆渡 Logo">
+  <img src="https://raw.githubusercontent.com/Xxcool/juejin-csdn-extension/master/assets/logo-128.png" width="96" height="96" alt="文章摆渡 Logo">
   <h1>⛵ 文章摆渡 (Article Ferry)</h1>
   <p><b>面向技术创作者的端侧安全内容摆渡中枢 · 一处专注写作，优雅摆渡全网阵地</b></p>
   <p>
@@ -69,7 +69,7 @@
 ## 🛡️ 可靠性与安全底座
 
 <div align="center">
-  <img src="assets/article/sync-pipeline.svg" alt="一篇文章的摆渡链路" width="800">
+  <img src="https://raw.githubusercontent.com/Xxcool/juejin-csdn-extension/master/assets/article/sync-pipeline.svg" alt="一篇文章的摆渡链路" width="800">
   <p><i>▲ 端到端处理管线：从用户明确触发到草稿安全落地的每一步均具备失败隔离与状态出口</i></p>
 </div>
 
