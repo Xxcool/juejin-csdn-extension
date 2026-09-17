@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="文章摆渡">
-  <rect width="128" height="128" rx="30" fill="#1D7DFA"/>
-  <rect x="25" y="23" width="59" height="75" rx="11" fill="none" stroke="#FFFFFF" stroke-opacity=".55" stroke-width="8"/>
-  <rect x="46" y="34" width="59" height="75" rx="11" fill="#FFFFFF"/>
-  <path d="M61 55h29M61 69h29M61 83h20" fill="none" stroke="#1D7DFA" stroke-width="7" stroke-linecap="round"/>
-</svg>

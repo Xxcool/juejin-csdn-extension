@@ -17,9 +17,7 @@
     "test": "vitest run",
     "dev": "node build.mjs --watch",
     "release:zip": "npm run check && npm test && npm run build:release && node scripts/package-release.mjs",
-    "release:notes": "node scripts/extract-release-notes.mjs",
-    "docs:dev": "vitepress dev docs",
-    "docs:build": "vitepress build docs"
+    "release:notes": "node scripts/extract-release-notes.mjs"
   },
   "devDependencies": {
     "@types/archiver": "^8.0.0",
@@ -27,7 +25,6 @@
     "archiver": "^8.0.0",
     "esbuild": "^0.25.9",
     "typescript": "^5.9.2",
-    "vitepress": "^1.6.4",
     "vitest": "^4.1.11"
   },
   "dependencies": {
