@@ -23,10 +23,10 @@ jobs:
       - name: Create or update GitHub Release
         run: |
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release edit "$GITHUB_REF_NAME" --title "🚀 $GITHUB_REF_NAME" --notes-file release/RELEASE_NOTES.md
+            gh release edit "$GITHUB_REF_NAME" --title "🚀 $GITHUB_REF_NAME" --notes-file release/RELEASE_NOTES.md --draft=false --latest
             gh release upload "$GITHUB_REF_NAME" release/*.zip --clobber
           else
-            gh release create "$GITHUB_REF_NAME" release/*.zip --title "🚀 $GITHUB_REF_NAME" --notes-file release/RELEASE_NOTES.md --verify-tag
+            gh release create "$GITHUB_REF_NAME" release/*.zip --title "🚀 $GITHUB_REF_NAME" --notes-file release/RELEASE_NOTES.md --verify-tag --latest
           fi
         env:
           GH_TOKEN: ${{ github.token }}

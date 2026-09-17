@@ -37,6 +37,10 @@ function switchTab(tab:'history'|'settings'){
     button.classList.toggle('active',isActive);
     button.setAttribute('aria-selected',String(isActive));
   });
+  const thumb=$('#spring-thumb');
+  if(thumb){
+    thumb.style.transform=tab==='settings'?'translateX(calc(100% + 2px))':'translateX(0)';
+  }
   const historyPane=$('#pane-history');
   const settingsPane=$('#pane-settings');
   historyPane.classList.toggle('active',tab==='history');
@@ -108,30 +112,45 @@ function taskCard(task:SyncTask){
   const stateLabel=task.status==='saved'&&task.warnings?.length?'同步成功，有警告':labels[task.status];
   const cover=task.article.cover?`<img src="${escapeHtml(task.article.cover)}" alt="">`:'';
   const actions=[];
-  if(task.draftUrl)actions.push(`<button class="history-action" data-open="${escapeHtml(task.draftUrl)}">草稿 ↗</button>`);
-  if(task.status==='needs-confirmation')actions.push(`<button class="history-action confirm" data-confirm="${escapeHtml(task.id)}">确认更新</button>`);
-  if(['failed','needs-user'].includes(task.status))actions.push(`<button class="history-action retry" data-retry="${escapeHtml(task.id)}">重试</button>`);
-  if(!['queued','checking-login','transforming','writing'].includes(task.status))actions.push(`<button class="history-action delete" data-delete="${escapeHtml(task.id)}" aria-label="删除本地记录">删除</button>`);
-  const action=`<span class="history-actions">${actions.join('')}</span>`;
+  if(task.draftUrl)actions.push(`<button class="history-action btn-action-primary" data-open="${escapeHtml(task.draftUrl)}">草稿 ↗</button>`);
+  if(task.status==='needs-confirmation')actions.push(`<button class="history-action confirm btn-action-confirm" data-confirm="${escapeHtml(task.id)}">确认更新</button>`);
+  if(['failed','needs-user'].includes(task.status))actions.push(`<button class="history-action retry btn-action-retry" data-retry="${escapeHtml(task.id)}">重试</button>`);
+  if(!['queued','checking-login','transforming','writing'].includes(task.status))actions.push(`<button class="history-action delete btn-action-delete" data-delete="${escapeHtml(task.id)}" title="删除本地记录" aria-label="删除本地记录"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>`);
+  const action=`<span class="task-actions">${actions.join('')}</span>`;
   const error=task.error?`<p class="platform-error" title="${escapeHtml(task.error)}">${escapeHtml(task.error)}</p>`:'';
   const diagText=task.diagnostic?`${task.article.title} [${task.diagnostic.category} - ${task.diagnostic.stage}]: ${task.diagnostic.message} (${task.diagnostic.suggestion})`:'';
   const diagnostic=task.diagnostic?`<div class="task-diagnostic"><div class="diagnostic-header"><b>${categoryLabels[task.diagnostic.category]} · ${stageLabels[task.diagnostic.stage]}</b><button class="btn-copy-diag" data-copy-diag="${escapeHtml(diagText)}">复制诊断</button></div><span>${escapeHtml(task.diagnostic.suggestion)}</span></div>`:'';
   const warning=task.warnings?.length?`<p class="platform-warning" title="${escapeHtml(task.warnings.join('\n'))}">${escapeHtml(task.warnings.join('；'))}</p>`:'';
-  const stats=task.stats?`<p class="task-stats">耗时 ${formatDuration(task.stats.durationMs)}<i>·</i>图片 ${task.stats.imageSucceeded}/${task.stats.imageTotal} 成功${task.stats.imageFailed?`，${task.stats.imageFailed} 失败`:''}</p>`:'';
-  const progress=task.progress?`<p class="task-progress"><span style="width:${task.progress.total?Math.min(100,Math.max(0,Math.round(task.progress.current/task.progress.total*100))):12}%"></span></p>`:'';
-  return`<details class="history-card" open>
-    <summary>
-      <span class="history-cover">${cover}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h8l4 4V20.5H6zM14 3.5v4h4M9 12h6M9 15.5h6"/></svg></span>
-      <span class="history-copy"><b title="${escapeHtml(task.article.title)}">${escapeHtml(task.article.title)}</b><small><strong class="${kind}">${stateLabel}</strong><i>·</i>${formatDate(task.updatedAt)}</small>${progress}</span>
-      <span class="history-chevron" aria-hidden="true"></span>
-    </summary>
-    <div class="platform-result ${kind}">
-      <span class="result-icon" aria-hidden="true">${kind==='success'?'✓':kind==='failure'?'×':kind==='warning'?'!':'·'}</span>
-      <span class="platform-result-copy"><b>CSDN</b>${stats}${error}${diagnostic}${warning}</span>
-      <span class="platform-state">${task.progress?escapeHtml(task.progress.message):stateLabel}</span>
+  const stats=task.stats?`耗时 <strong>${formatDuration(task.stats.durationMs)}</strong><i>·</i>图片 <strong>${task.stats.imageSucceeded}/${task.stats.imageTotal}</strong>${task.stats.imageFailed?`<i>·</i><strong>${task.stats.imageFailed}</strong> 失败`:''}`:'';
+  const progressPercent=task.progress?.total?Math.min(100,Math.max(0,Math.round(task.progress.current/task.progress.total*100))):0;
+  const progress=task.progress?`<div class="task-progress-box">
+    <div class="progress-info">
+      <span class="progress-msg">${escapeHtml(task.progress.message||'正在同步中…')}</span>
+      <span class="progress-percent">${task.progress.total?`${progressPercent}%`:'进行中…'}</span>
+    </div>
+    <p class="task-progress ${task.progress.total?'':'indeterminate'}"><span style="width:${task.progress.total?progressPercent:35}%"></span></p>
+  </div>`:'';
+  return`<div class="history-card ${kind}">
+    <div class="task-main-row">
+      <span class="history-cover">${cover}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></span>
+      <div class="task-info">
+        <b class="task-title" title="${escapeHtml(task.article.title)}">${escapeHtml(task.article.title)}</b>
+        <div class="task-meta">
+          <span class="state-tag ${kind}">${stateLabel}</span>
+          <span>·</span>
+          <span>${formatDate(task.updatedAt)}</span>
+        </div>
+      </div>
+    </div>
+    ${progress}
+    ${error}
+    ${diagnostic}
+    ${warning}
+    <div class="task-bottom-row">
+      <div class="task-stats">${stats||'<span>CSDN 草稿同步</span>'}</div>
       ${action}
     </div>
-  </details>`;
+  </div>`;
 }
 
 async function loadTasks(){
@@ -147,11 +166,48 @@ async function loadTasks(){
     clearButton.disabled=!all.length;
     $<HTMLButtonElement>('#history-retry-all').disabled=!all.some(task=>['failed','needs-user'].includes(task.status));
     if(!tasks.length){
-      list.innerHTML=`<div class="empty-state">
-        <div class="empty-icon"><svg viewBox="0 0 48 48"><path d="M8 17h32v22H8zM8 17l5-8h22l5 8M18 25h12v5H18z"/></svg></div>
-        <div class="empty-title">${all.length?'当前筛选下暂无记录':'暂无同步记录'}</div>
-        <p class="empty-desc">${all.length?'可尝试切换上方的状态筛选条件。':'在掘金发布新文章时勾选同步，或在文章列表点击「同步到 CSDN」即可自动生成草稿。'}</p>
-        ${all.length?'':'<button id="btn-goto-juejin" class="empty-action">前往掘金文章管理 ↗</button>'}
+      list.innerHTML=`<div class="empty-state-view harbor-empty-view">
+        <div class="harbor-beacon-stage">
+          <div class="water-ripple"></div>
+          <div class="harbor-boat-card">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 17l20 0"/>
+              <path d="M4 17l2 -6h12l2 6"/>
+              <path d="M12 5v6"/>
+              <path d="M12 5l6 3.5h-6"/>
+            </svg>
+            <span class="beacon-star"></span>
+          </div>
+        </div>
+        <h2 class="empty-headline harbor-headline">${all.length?'当前筛选下无记录':'准备就绪，开启摆渡'}</h2>
+        <p class="empty-subtext harbor-subtext">${all.length?'可尝试切换上方的状态筛选条件。':'在掘金发文时开启同步勾选，文章与图片将如期摆渡至目标草稿箱。'}</p>
+        ${all.length?'':`<button id="btn-goto-juejin" class="btn-launch-juejin btn-embark">
+          <span>前往掘金文章管理</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 17l9.2-9.2M17 17V8H8"/></svg>
+        </button>
+        <div class="guide-card">
+          <div class="guide-card-header">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            <span>只需 3 步完成摆渡</span>
+          </div>
+          <div class="guide-steps">
+            <div class="guide-step-item">
+              <span class="step-num-pill">1</span>
+              <span class="step-title">掘金写完</span>
+              <span class="step-desc">正常撰写并发布</span>
+            </div>
+            <div class="guide-step-item">
+              <span class="step-num-pill">2</span>
+              <span class="step-title">勾选同步</span>
+              <span class="step-desc">面板开启 CSDN</span>
+            </div>
+            <div class="guide-step-item">
+              <span class="step-num-pill">3</span>
+              <span class="step-title">草稿直达</span>
+              <span class="step-desc">打开草稿箱确认</span>
+            </div>
+          </div>
+        </div>`}
       </div>`;
       $('#btn-goto-juejin')?.addEventListener('click',()=>void chrome.tabs.create({url:'https://juejin.cn/creator/content/article/essays?status=all',active:true}));
       return;
@@ -272,8 +328,12 @@ chrome.storage.onChanged.addListener((changes,area)=>{
 
 try{
   const version=chrome.runtime.getManifest()?.version;
-  const versionEl=$('#app-version');
-  if(versionEl&&version)versionEl.textContent=`版本 v${version}`;
+  if(version){
+    const versionEl=$('#app-version');
+    if(versionEl)versionEl.textContent=`版本 v${version}`;
+    const brandVersionEl=$('#brand-version');
+    if(brandVersionEl)brandVersionEl.textContent=`v${version}`;
+  }
 }catch{}
 
 void loadTasks();
