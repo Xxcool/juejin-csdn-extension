@@ -39,7 +39,7 @@ function switchTab(tab:'history'|'settings'){
   });
   const thumb=$('#spring-thumb');
   if(thumb){
-    thumb.style.transform=tab==='settings'?'translateX(calc(100% + 2px))':'translateX(0)';
+    thumb.style.transform=tab==='settings'?'translateX(100%)':'translateX(0)';
   }
   const historyPane=$('#pane-history');
   const settingsPane=$('#pane-settings');
@@ -95,9 +95,9 @@ function formatDate(value:string){
 }
 
 function formatDuration(durationMs:number){
-  if(durationMs<1000)return`${durationMs} 毫秒`;
-  if(durationMs<60000)return`${(durationMs/1000).toFixed(1)} 秒`;
-  return`${Math.floor(durationMs/60000)} 分 ${Math.round(durationMs%60000/1000)} 秒`;
+  if(durationMs<1000)return`${(durationMs/1000).toFixed(1)}s`;
+  if(durationMs<60000)return`${(durationMs/1000).toFixed(1)}s`;
+  return`${Math.floor(durationMs/60000)}m ${Math.round(durationMs%60000/1000)}s`;
 }
 
 function statusKind(task:SyncTask){
@@ -109,7 +109,21 @@ function statusKind(task:SyncTask){
 
 function taskCard(task:SyncTask){
   const kind=statusKind(task);
-  const stateLabel=task.status==='saved'&&task.warnings?.length?'同步成功，有警告':labels[task.status];
+  let stateText=labels[task.status]||'同步中';
+  let stateIcon='⛵';
+  if(task.status==='saved'){
+    stateText=task.warnings?.length?'已保存，有警告':(task.draftUrl?'已抵达草稿箱':'同步成功');
+    stateIcon=task.warnings?.length?'⚠':'✓';
+  }else if(task.status==='failed'){
+    stateText='同步失败';
+    stateIcon='✕';
+  }else if(task.status==='needs-user'){
+    stateText='需要处理';
+    stateIcon='!';
+  }else if(task.status==='needs-confirmation'){
+    stateText='等待确认';
+    stateIcon='⚠';
+  }
   const cover=task.article.cover?`<img src="${escapeHtml(task.article.cover)}" alt="">`:'';
   const actions=[];
   if(task.draftUrl)actions.push(`<button class="history-action btn-action-primary" data-open="${escapeHtml(task.draftUrl)}">草稿 ↗</button>`);
@@ -121,14 +135,14 @@ function taskCard(task:SyncTask){
   const diagText=task.diagnostic?`${task.article.title} [${task.diagnostic.category} - ${task.diagnostic.stage}]: ${task.diagnostic.message} (${task.diagnostic.suggestion})`:'';
   const diagnostic=task.diagnostic?`<div class="task-diagnostic"><div class="diagnostic-header"><b>${categoryLabels[task.diagnostic.category]} · ${stageLabels[task.diagnostic.stage]}</b><button class="btn-copy-diag" data-copy-diag="${escapeHtml(diagText)}">复制诊断</button></div><span>${escapeHtml(task.diagnostic.suggestion)}</span></div>`:'';
   const warning=task.warnings?.length?`<p class="platform-warning" title="${escapeHtml(task.warnings.join('\n'))}">${escapeHtml(task.warnings.join('；'))}</p>`:'';
-  const stats=task.stats?`耗时 <strong>${formatDuration(task.stats.durationMs)}</strong><i>·</i>图片 <strong>${task.stats.imageSucceeded}/${task.stats.imageTotal}</strong>${task.stats.imageFailed?`<i>·</i><strong>${task.stats.imageFailed}</strong> 失败`:''}`:'';
+  const stats=task.stats?`耗时 <b>${formatDuration(task.stats.durationMs)}</b><i>·</i>图片 <b>${task.stats.imageSucceeded}/${task.stats.imageTotal}</b>${task.stats.imageFailed?`<i>·</i><strong>${task.stats.imageFailed}</strong> 失败`:''}`:'';
   const progressPercent=task.progress?.total?Math.min(100,Math.max(0,Math.round(task.progress.current/task.progress.total*100))):0;
   const progress=task.progress?`<div class="task-progress-box">
     <div class="progress-info">
-      <span class="progress-msg">${escapeHtml(task.progress.message||'正在同步中…')}</span>
+      <span class="progress-msg">${escapeHtml(task.progress.message||'正在摆渡中…')}</span>
       <span class="progress-percent">${task.progress.total?`${progressPercent}%`:'进行中…'}</span>
     </div>
-    <p class="task-progress ${task.progress.total?'':'indeterminate'}"><span style="width:${task.progress.total?progressPercent:35}%"></span></p>
+    <div class="task-progress ${task.progress.total?'':'indeterminate'}"><span style="width:${task.progress.total?progressPercent:35}%"></span></div>
   </div>`:'';
   return`<div class="history-card ${kind}">
     <div class="task-main-row">
@@ -136,7 +150,7 @@ function taskCard(task:SyncTask){
       <div class="task-info">
         <b class="task-title" title="${escapeHtml(task.article.title)}">${escapeHtml(task.article.title)}</b>
         <div class="task-meta">
-          <span class="state-tag ${kind}">${stateLabel}</span>
+          <span class="state-tag ${kind}">${stateIcon} ${stateText}</span>
           <span>·</span>
           <span>${formatDate(task.updatedAt)}</span>
         </div>
@@ -159,7 +173,21 @@ async function loadTasks(){
     const all=((result?.tasks||[]) as SyncTask[]).sort((a,b)=>Date.parse(b.updatedAt)-Date.parse(a.updatedAt));
     const tasks=all.filter(task=>historyFilter==='all'||(historyFilter==='saved'?task.status==='saved':historyFilter==='failed'?['failed','needs-user'].includes(task.status):['queued','checking-login','transforming','writing','needs-confirmation'].includes(task.status)));
     const list=$('#task-list');
-    $('#history-count').textContent=historyFilter==='all'?`${all.length} 篇`:`${tasks.length}/${all.length} 篇`;
+    
+    const savedCount=all.filter(t=>t.status==='saved').length;
+    const failedCount=all.filter(t=>['failed','needs-user'].includes(t.status)).length;
+    const workingCount=all.filter(t=>['queued','checking-login','transforming','writing','needs-confirmation'].includes(t.status)).length;
+    
+    const countAll=$('#count-all');
+    if(countAll)countAll.textContent=all.length?String(all.length):'';
+    const countSaved=$('#count-saved');
+    if(countSaved)countSaved.textContent=savedCount?String(savedCount):'';
+    const countFailed=$('#count-failed');
+    if(countFailed)countFailed.textContent=failedCount?String(failedCount):'';
+    const countWorking=$('#count-working');
+    if(countWorking)countWorking.textContent=workingCount?String(workingCount):'';
+
+    $('#history-count').textContent=historyFilter==='all'?'':`${tasks.length}/${all.length} 篇`;
     const badge=$('#history-badge');
     badge.textContent=String(all.length);
     const clearButton=$<HTMLButtonElement>('#history-clear');

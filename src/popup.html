@@ -22,7 +22,7 @@
         <div class="brand-text-col">
           <div class="brand-name-row">
             <strong id="page-title">文章摆渡</strong>
-            <span id="brand-version" class="brand-tag">v0.5.2</span>
+            <span id="brand-version" class="brand-tag">v0.5.3</span>
           </div>
           <span class="brand-motto">一键摆渡 · 草稿安全着陆</span>
         </div>
@@ -51,10 +51,10 @@
     <section id="pane-history" class="tab-pane active" role="tabpanel" aria-labelledby="tab-history">
       <div class="history-toolbar">
         <div class="history-filters" role="group" aria-label="筛选同步记录">
-          <button class="filter-chip active" data-filter="all">全部</button>
-          <button class="filter-chip" data-filter="saved">成功</button>
-          <button class="filter-chip" data-filter="failed">失败</button>
-          <button class="filter-chip" data-filter="working">进行中</button>
+          <button class="filter-chip active" data-filter="all"><span>全部</span><span class="chip-count" id="count-all"></span></button>
+          <button class="filter-chip" data-filter="saved"><span>成功</span><span class="chip-count" id="count-saved"></span></button>
+          <button class="filter-chip" data-filter="failed"><span>失败</span><span class="chip-count" id="count-failed"></span></button>
+          <button class="filter-chip" data-filter="working"><span>进行中</span><span class="chip-count" id="count-working"></span></button>
         </div>
         <div class="history-actions-bar">
           <span id="history-count">0 篇</span>
@@ -129,7 +129,7 @@
           </div>
           <p>任务记录仅保存在当前 Chrome；插件不收集、不存储用户账号凭据，CSDN 仅生成草稿绝不替用户自动发布。</p>
           <div class="notice-footer">
-            <span id="app-version">版本 v0.5.2</span>
+            <span id="app-version">版本 v0.5.3</span>
             <a href="https://github.com/Xxcool/juejin-csdn-extension" target="_blank" rel="noreferrer">GitHub 开源 ↗</a>
           </div>
         </div>
