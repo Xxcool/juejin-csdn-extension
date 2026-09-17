@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/Xxcool/juejin-csdn-extension/master/assets/logo-128.png" width="96" height="96" alt="文章摆渡 Logo">
+  <img src="assets/logo-128.png" width="96" height="96" alt="文章摆渡 Logo">
   <h1>⛵ 文章摆渡 (Article Ferry)</h1>
   <p><b>面向技术创作者的端侧安全内容摆渡中枢 · 一处专注写作，优雅摆渡全网阵地</b></p>
   <p>
