@@ -6,7 +6,7 @@ const API_BASE='https://api.juejin.cn/content_api/v1';
 
 type ApiResponse<T>={err_no:number;err_msg:string;data:T};
 type ArticleListItem={article_info?:{article_id?:string;draft_id?:string;title?:string;cover_image?:string};tags?:{tag_name?:string}[]};
-type DraftDetail={article_draft?:{id?:string;title?:string;mark_content?:string;cover_image?:string;tags?:{tag_name?:string}[]}};
+type DraftDetail={article_draft?:{id?:string;title?:string;mark_content?:string;brief?:string;cover_image?:string;tags?:{tag_name?:string}[]}};
 
 async function post<T>(path:string,body:unknown,uuid:string):Promise<T>{
   if(!uuid)throw new SyncError('无法读取掘金请求标识，请刷新文章列表后重试','platform-change','content');
@@ -32,7 +32,9 @@ async function fetchDraftContent(draftId:string,uuid:string){
   const draft=detail.article_draft;
   const markdown=draft?.mark_content?.trim()||'';
   if(markdown.length<20)throw new SyncError('掘金草稿正文为空或过短','content','content');
-  return{title:draft?.title?.trim()||'',markdown,tags:(draft?.tags||[]).map(tag=>tag.tag_name||'').filter(Boolean),cover:draft?.cover_image||undefined};
+  // brief 为作者在掘金发布面板手填的文章摘要；缺失时交由 CSDN 侧自动提取兜底。
+  const summary=draft?.brief?.trim()||undefined;
+  return{title:draft?.title?.trim()||'',markdown,summary,tags:(draft?.tags||[]).map(tag=>tag.tag_name||'').filter(Boolean),cover:draft?.cover_image||undefined};
 }
 
 /** 新文章（已知掘金草稿 ID）直接读取草稿详情，用于重试时回填被瘦身的正文。 */
@@ -43,6 +45,7 @@ export async function fetchJuejinDraftByDraftId(draftId:string,uuid:string,title
     sourceDraftId:draftId,
     title:content.title||titleFallback,
     markdown:content.markdown,
+    summary:content.summary,
     tags:content.tags,
     cover:content.cover,
     sourceUrl:`https://juejin.cn/editor/drafts/${draftId}`
@@ -71,6 +74,7 @@ export async function fetchJuejinDraftByArticleId(articleId:string,uuid:string,t
     sourceDraftId:String(draftId),
     title:content.title||entry?.article_info?.title?.trim()||titleFallback,
     markdown:content.markdown,
+    summary:content.summary,
     tags:content.tags.length?content.tags:(entry?.tags||[]).map(tag=>tag.tag_name||'').filter(Boolean),
     cover:content.cover||entry?.article_info?.cover_image||undefined,
     sourceUrl:`https://juejin.cn/post/${articleId}`

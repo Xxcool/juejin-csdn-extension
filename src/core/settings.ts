@@ -6,6 +6,8 @@ export const defaultSettings:ExtensionSettings={
   defaultCsdnCategory:'',
   categoryMappings:[],
   syncCover:true,
+  autoSummary:true,
+  appendSourceLink:true,
   imageFailurePolicy:'continue',
   confirmDraftUpdate:false
 };
@@ -20,6 +22,8 @@ export function normalizeSettings(value:unknown):ExtensionSettings{
     defaultCsdnCategory:clean(input.defaultCsdnCategory),
     categoryMappings:mappings,
     syncCover:input.syncCover!==false,
+    autoSummary:input.autoSummary!==false,
+    appendSourceLink:input.appendSourceLink!==false,
     imageFailurePolicy:input.imageFailurePolicy==='abort'?'abort':'continue',
     confirmDraftUpdate:input.confirmDraftUpdate===true
   };

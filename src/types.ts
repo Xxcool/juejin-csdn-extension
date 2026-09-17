@@ -11,5 +11,5 @@ export type CsdnDraftMapping={articleId:string;csdnArticleId:string;draftUrl?:st
 export type PlatformState={id:PlatformId;name:string;loggedIn:'unknown'|'yes'|'no'};
 export type CategoryMapping={sourceTag:string;targetCategory:string};
 export type ImageFailurePolicy='continue'|'abort';
-export type ExtensionSettings={autoSyncAfterPublish:boolean;defaultCsdnCategory:string;categoryMappings:CategoryMapping[];syncCover:boolean;imageFailurePolicy:ImageFailurePolicy;confirmDraftUpdate:boolean};
+export type ExtensionSettings={autoSyncAfterPublish:boolean;defaultCsdnCategory:string;categoryMappings:CategoryMapping[];syncCover:boolean;autoSummary:boolean;appendSourceLink:boolean;imageFailurePolicy:ImageFailurePolicy;confirmDraftUpdate:boolean};
 export const uid=()=>crypto.randomUUID();

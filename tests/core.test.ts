@@ -6,8 +6,10 @@ import {articleIdentityKeys,canDeleteTask,extractCsdnArticleId,findMatchingTask,
 import {SyncError,classifySyncError} from '../src/core/diagnostic';
 import {isSupportedMessage} from '../src/core/message';
 import {defaultSettings,formatCategoryMappings,normalizeSettings,parseCategoryMappings,resolveCsdnCategories,shouldConfirmDraftUpdate} from '../src/core/settings';
+import {buildTaskNotification} from '../src/core/notify';
+import {fetchHealthStatus,isHealthAlert,parseHealthPayload,refreshHealthIfNeeded} from '../src/core/health';
 import {fetchJuejinDraftByArticleId,fetchJuejinDraftByDraftId} from '../src/source/juejin-api';
-import {applyImageTransfers,buildSaveArticleBody,checkCsdnAuth,collectExternalImages,enforceImageFailurePolicy,fetchCsdnArticleState,imageExtension,normalizeMarkdown,sanitizeJuejinContainers,saveDraftViaApi,summarizeImageTransfers,validateCsdnArticle} from '../src/targets/csdn-api';
+import {applyImageTransfers,buildDryRunReport,buildSaveArticleBody,buildSourceAttribution,checkCsdnAuth,collectExternalImages,enforceImageFailurePolicy,extractSummary,fetchCsdnArticleState,fetchCsdnCategories,imageExtension,normalizeMarkdown,sanitizeJuejinContainers,saveDraftViaApi,stripJuejinImageParams,summarizeImageTransfers,validateCsdnArticle} from '../src/targets/csdn-api';
 import type {Article,SyncTask} from '../src/types';
 import rules from '../rules.json';
 
@@ -284,5 +286,155 @@ describe('v0.5.1 底座加固',()=>{
       '||api.juejin.cn/content_api/v1/article/list_by_user',
       '||api.juejin.cn/content_api/v1/article_draft/detail'
     ]);
+  });
+});
+
+describe('v0.6.0 体验深化',()=>{
+  it('摘要提取剥离代码块、图片、链接与行内标记并截断到上限',()=>{
+    expect(extractSummary('# 标题\n正文 **加粗** 与 [链接文字](https://example.com) `代码`\n\n![图片](https://img.example.com/a.png)\n\n```js\nconst x=1;\n```')).toBe('标题 正文 加粗 与 链接文字 代码');
+    expect(extractSummary('<div>块级 HTML</div>')).toBe('块级 HTML');
+    expect(extractSummary('啊'.repeat(150),100)).toBe('啊'.repeat(100));
+  });
+
+  it('首发声明仅在存在掘金来源链接时注入',()=>{
+    expect(buildSourceAttribution(article)).toBe('\n\n---\n\n> 本文首发于掘金：[测试文章](https://juejin.cn/post/1)');
+    expect(buildSourceAttribution({...article,sourceUrl:' '})).toBe('');
+    expect(buildSourceAttribution({...article,title:' '})).toBe('\n\n---\n\n> 本文首发于掘金：https://juejin.cn/post/1');
+  });
+
+  it('剔除掘金 CDN 图片的水印参数，其他站点与非参数链接保持原样',()=>{
+    expect(stripJuejinImageParams('https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/abc.png~tplv-k3u1fbpfcp-watermark.image')).toBe('https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/abc.png');
+    expect(stripJuejinImageParams('https://p6-juejin.byteimg.com/abc.png?x-oss-process=image/watermark&keep=1')).toBe('https://p6-juejin.byteimg.com/abc.png?keep=1');
+    expect(stripJuejinImageParams('https://img.example.com/a.png~tplv-x?x-oss-process=y')).toBe('https://img.example.com/a.png~tplv-x?x-oss-process=y');
+    expect(stripJuejinImageParams('https://p3-juejin.byteimg.com/plain.png')).toBe('https://p3-juejin.byteimg.com/plain.png');
+    expect(stripJuejinImageParams('not a url')).toBe('not a url');
+  });
+
+  it('分类列表接口解析字符串数组并过滤脏数据，未登录时给出指引，兼容 categories 拼写',async()=>{
+    const respond=(data:unknown,status=200)=>vi.fn().mockResolvedValue(new Response(JSON.stringify(data),{status}));
+    vi.stubGlobal('fetch',respond({code:200,data:{categorys:[' 前端 ','后端','',42,null]}}));
+    await expect(fetchCsdnCategories()).resolves.toEqual({ok:true,categories:['前端','后端']});
+    vi.stubGlobal('fetch',respond({code:200,data:{categories:['人工智能']}}));
+    await expect(fetchCsdnCategories()).resolves.toEqual({ok:true,categories:['人工智能']});
+    vi.stubGlobal('fetch',respond({code:200,data:{categorys:'前端'}}));
+    await expect(fetchCsdnCategories()).resolves.toMatchObject({ok:true,categories:[]});
+    vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response('',{status:401})));
+    await expect(fetchCsdnCategories()).resolves.toMatchObject({ok:false,message:'请先登录 CSDN'});
+  });
+
+  it('同步预演报告汇总标题、图片、容器与分类风险',()=>{
+    const dryArticle:Article={id:'juejin-dry',title:'预演文章标题',tags:['TypeScript'],sourceUrl:'https://juejin.cn/post/9',markdown:'---\ntheme: juejin\n---\n开头介绍文字。\n\n![图](https://img.example.com/a.png)\n\n:::tips\n提示\n:::\n\n```ts\nconst x=1;\n```'};
+    const report=buildDryRunReport(dryArticle,defaultSettings);
+    expect(report.titleLength).toBe(6);
+    expect(report.imageCount).toBe(1);
+    expect(report.containerCount).toBe(1);
+    expect(report.codeFenceCount).toBe(1);
+    expect(report.categories).toEqual([]);
+    expect(report.issues).toEqual([
+      '未命中任何 CSDN 分类（可在偏好设置中配置默认分类或标签映射）'
+    ]);
+    expect(report.notices).toEqual([
+      '将在正文末尾注入首发声明（掘金原文：https://juejin.cn/post/9）'
+    ]);
+    expect(report.summaryPreview).toContain('开头介绍文字');
+    // 配置完备的合规文章：风险清单为空，预演弹窗展示绿色就绪态
+    const cleanReport=buildDryRunReport({...dryArticle,tags:[]},{...defaultSettings,defaultCsdnCategory:'前端'});
+    expect(cleanReport.issues).toEqual([]);
+    expect(cleanReport.notices).toEqual([
+      '将在正文末尾注入首发声明（掘金原文：https://juejin.cn/post/9）'
+    ]);
+
+    const offReport=buildDryRunReport({...dryArticle,title:'短'},{...defaultSettings,autoSummary:false,appendSourceLink:false,defaultCsdnCategory:'其他'});
+    expect(offReport.summaryPreview).toBe('');
+    expect(offReport.categories).toEqual(['其他']);
+    expect(offReport.issues).toEqual(['标题 1 字，少于 CSDN 要求的 5 字下限']);
+  });
+
+  it('长耗时或多图任务触发系统通知，短任务安静；失败任务豁免时长门槛',()=>{
+    const savedTask:SyncTask={id:'notify-1',article,platform:'csdn',status:'saved',createdAt:'2026-09-01T00:00:00Z',updatedAt:'2026-09-01T00:00:00Z',attempts:1,csdnArticleId:'123',draftUrl:'https://editor.csdn.net/md/?articleId=123',stats:{imageTotal:3,imageSucceeded:2,imageFailed:1,durationMs:2000}};
+    expect(buildTaskNotification(savedTask,2000)).toMatchObject({id:'notify-1',kind:'saved',title:'文章已抵达 CSDN 草稿箱',draftUrl:'https://editor.csdn.net/md/?articleId=123'});
+    expect(buildTaskNotification(savedTask,2000)!.message).toContain('2/3');
+    const noStats:SyncTask={...savedTask,stats:undefined};
+    expect(buildTaskNotification(noStats,9000)).toBeUndefined();
+    expect(buildTaskNotification(noStats,10000)).toMatchObject({kind:'saved'});
+    const failedTask:SyncTask={id:'notify-2',article,platform:'csdn',status:'failed',createdAt:'2026-09-01T00:00:00Z',updatedAt:'2026-09-01T00:00:00Z',attempts:1,error:'请先登录 CSDN',diagnostic:{stage:'authentication',category:'login',message:'请先登录 CSDN',suggestion:'',occurredAt:'2026-09-01T00:00:00Z'}};
+    expect(buildTaskNotification(failedTask,15000)).toMatchObject({kind:'failed',title:'文章摆渡同步需要处理'});
+    expect(buildTaskNotification(failedTask,15000)!.message).toContain('请先登录 CSDN');
+    // 快速失败（如未登录 200ms 内失败）也必须通知，避免用户切走后误以为同步成功
+    expect(buildTaskNotification({...failedTask,stats:undefined},200)).toMatchObject({kind:'failed'});
+    expect(buildTaskNotification({...failedTask,status:'needs-user',stats:undefined},200)).toMatchObject({kind:'failed'});
+    expect(buildTaskNotification({...failedTask,status:'writing'},15000)).toBeUndefined();
+  });
+
+  it('健康状态解析降级未知字段，仅 broken 触发警示，拉取失败静默返回无数据',async()=>{
+    const healthy=parseHealthPayload({csdn:'ok',juejin:'degraded',message:'掘金接口偶发超时',updatedAt:'2026-09-17T00:00:00Z'});
+    expect(healthy).toMatchObject({csdn:'ok',juejin:'degraded',message:'掘金接口偶发超时',updatedAt:'2026-09-17T00:00:00Z'});
+    expect(isHealthAlert(healthy)).toBe(false);
+    expect(parseHealthPayload({csdn:'broken',juejin:'mystery'})).toMatchObject({csdn:'broken',juejin:'unknown'});
+    expect(isHealthAlert(parseHealthPayload({csdn:'ok',juejin:'broken',message:'x'}))).toBe(true);
+    expect(parseHealthPayload('invalid')).toMatchObject({csdn:'unknown',juejin:'unknown',message:''});
+    expect(isHealthAlert(undefined)).toBe(false);
+
+    vi.stubGlobal('fetch',vi.fn().mockRejectedValue(new Error('offline')));
+    await expect(fetchHealthStatus()).resolves.toBeUndefined();
+    vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response('',{status:500})));
+    await expect(fetchHealthStatus()).resolves.toBeUndefined();
+  });
+
+  it('健康检查缓存 12 小时内跳过网络请求，过期或强制时重新拉取',async()=>{
+    const store:{healthStatus?:unknown}={healthStatus:{csdn:'ok',juejin:'ok',message:'',sourceUrl:'',updatedAt:'',checkedAt:new Date().toISOString()}};
+    // 注意每次调用需返回全新 Response：同一实例的 body 只能被读取一次
+    const fetchMock=vi.fn().mockImplementation(async()=>new Response(JSON.stringify({csdn:'degraded',juejin:'ok'}),{status:200}));
+    vi.stubGlobal('fetch',fetchMock);
+    vi.stubGlobal('chrome',{storage:{local:{
+      get:async(key:string)=>({[key]:store[key as keyof typeof store]}),
+      set:async(patch:Record<string,unknown>)=>{Object.assign(store,patch);}
+    }}});
+    try{
+      // 缓存新鲜：直接复用本地缓存，不发起网络请求
+      await expect(refreshHealthIfNeeded()).resolves.toMatchObject({csdn:'ok'});
+      expect(fetchMock).not.toHaveBeenCalled();
+      // 强制刷新（alarm 到期）：发起请求并更新缓存
+      await expect(refreshHealthIfNeeded(true)).resolves.toMatchObject({csdn:'degraded'});
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      // 缓存过期（checkedAt 早于 12 小时）：发起请求
+      store.healthStatus={csdn:'ok',juejin:'ok',message:'',sourceUrl:'',updatedAt:'',checkedAt:'2020-01-01T00:00:00Z'};
+      await expect(refreshHealthIfNeeded()).resolves.toMatchObject({csdn:'degraded'});
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      // 无缓存（首次安装）：发起请求
+      delete store.healthStatus;
+      await expect(refreshHealthIfNeeded()).resolves.toMatchObject({csdn:'degraded'});
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    }finally{
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('旧设置补齐摘要与首发声明默认值，显式关闭时保留',()=>{
+    expect(normalizeSettings({})).toMatchObject({autoSummary:true,appendSourceLink:true});
+    expect(normalizeSettings({autoSummary:false,appendSourceLink:false})).toMatchObject({autoSummary:false,appendSourceLink:false});
+  });
+
+  it('保存请求携带编辑器摘要字段且原创 original_link 保持留空',()=>{
+    const prepared={markdown:'m',html:'<p>m</p>',summary:'自动摘要文本'};
+    expect(buildSaveArticleBody(article,prepared,undefined,[],true)).toMatchObject({Description:'自动摘要文本',original_link:'',type:'original'});
+    expect(buildSaveArticleBody(article,prepared,undefined,[],false)).toMatchObject({Description:''});
+  });
+
+  it('更新已删除的 CSDN 草稿报 400 时自动降级为新建草稿',async()=>{
+    const bodies:string[]=[];
+    vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+      const url=String(input);
+      if(url.includes('getBaseInfo'))return new Response(JSON.stringify({code:200,data:{name:'tester'}}),{status:200});
+      bodies.push(String(init?.body));
+      return bodies.length===1
+        ?new Response(JSON.stringify({code:400,msg:'该文章不存在或状态异常，请手动保存！'}),{status:400})
+        :new Response(JSON.stringify({code:200,data:{id:'fresh-1',url:'https://editor.csdn.net/md/?articleId=fresh-1'}}),{status:200});
+    }));
+    const result=await saveDraftViaApi({...article,title:'足够长的同步标题',markdown:'这是长度超过二十个字符的完整正文内容，用于验证删除降级新建流程。'},{articleId:'deleted-1'});
+    expect(result).toMatchObject({articleId:'fresh-1',draftUrl:'https://editor.csdn.net/md/?articleId=fresh-1'});
+    expect(JSON.parse(bodies[0])).toMatchObject({id:'deleted-1',is_new:0});
+    expect(JSON.parse(bodies[1])).toMatchObject({is_new:1});
+    expect(JSON.parse(bodies[1]).id).toBeUndefined();
   });
 });

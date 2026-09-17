@@ -4,10 +4,12 @@ import {allTasks,clearAllTasks,deleteTask,getArticleDraftMapping,getSettings,mig
 import {canDeleteTask,extractCsdnArticleId,findMatchingTask,isActiveTask,isInterruptedTask,isRetryableTask,isUncertainCreateTask} from './core/task';
 import {SyncError,classifySyncError} from './core/diagnostic';
 import {isSupportedMessage} from './core/message';
+import {buildTaskNotification,showTaskNotification} from './core/notify';
+import {HEALTH_CHECK_ALARM,getCachedHealth,isHealthAlert,refreshHealthIfNeeded} from './core/health';
 import {resolveCsdnCategories,shouldConfirmDraftUpdate} from './core/settings';
 import {fetchJuejinDraftByArticleId,fetchJuejinDraftByDraftId} from './source/juejin-api';
 import {csdnAdapter} from './targets/csdn';
-import {checkCsdnAuth,fetchCsdnArticleState,saveDraftViaApi,validateCsdnArticle} from './targets/csdn-api';
+import {buildDryRunReport,checkCsdnAuth,fetchCsdnArticleState,fetchCsdnCategories,saveDraftViaApi,validateCsdnArticle} from './targets/csdn-api';
 import type {Article,ExtensionSettings,SyncTask,TaskStage} from './types';
 import {uid} from './types';
 
@@ -56,6 +58,8 @@ async function runTask(task:SyncTask){
       articleId:task.csdnArticleId,
       categories:resolveCsdnCategories(transformed.tags,settings),
       syncCover:settings.syncCover,
+      autoSummary:settings.autoSummary,
+      appendSourceLink:settings.appendSourceLink,
       imageFailurePolicy:settings.imageFailurePolicy,
       onPreparing:()=>{stage='content';},
       onProgress:async progress=>{stage='images';await patchTask(task.id,{status:'transforming',progress});},
@@ -66,11 +70,17 @@ async function runTask(task:SyncTask){
     await chrome.action.setBadgeBackgroundColor({color:'#1d6744'});
     await chrome.action.setBadgeText({text:'✓'});
     setTimeout(()=>chrome.action.setBadgeText({text:''}),5000);
+    // task 局部变量仍是入参旧状态（patchTask 只写 storage），必须显式标记 saved，否则成功通知永不触发。
+    const notification=buildTaskNotification({...task,status:'saved',draftUrl:result.draftUrl,stats:{...result.stats,durationMs:Date.now()-startedAt}},Date.now()-startedAt);
+    if(notification)await showTaskNotification(notification);
   }catch(error){
     const diagnostic=classifySyncError(error,stage);
-    await patchTask(task.id,{status:diagnostic.category==='login'||diagnostic.category==='blocked'?'needs-user':'failed',error:diagnostic.message,diagnostic,progress:undefined});
+    const failedTask:SyncTask={...task,status:diagnostic.category==='login'||diagnostic.category==='blocked'?'needs-user':'failed',error:diagnostic.message,diagnostic};
+    await patchTask(task.id,{status:failedTask.status,error:diagnostic.message,diagnostic,progress:undefined});
     await chrome.action.setBadgeBackgroundColor({color:'#a24332'});
     await chrome.action.setBadgeText({text:'!'});
+    const notification=buildTaskNotification(failedTask,Date.now()-startedAt);
+    if(notification)await showTaskNotification(notification);
     throw error;
   }
 }
@@ -156,6 +166,19 @@ async function resumePendingHistory(){
   return{ok:true,resumed:true,articleId:pendingHistory.articleId,task:await create(article)};
 }
 
+/** 同步预演：回填正文后执行内容分析，但不转存图片、不写入 CSDN。 */
+async function dryRunTask(id:string){
+  const task=(await allTasks()).find(item=>item.id===id);
+  if(!task)return{ok:false,message:'任务不存在'};
+  try{
+    const article=await ensureArticleContent(task.article);
+    const settings=await getSettings();
+    return{ok:true,report:buildDryRunReport(article,settings)};
+  }catch(error){
+    return{ok:false,message:(error as Error).message||'预演失败'};
+  }
+}
+
 chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   (async()=>{
     if(!isSupportedMessage(message)){reply({ok:false,message:'不支持的扩展消息'});return;}
@@ -202,7 +225,47 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
     }else if(message.type==='CLEAR_TASKS'){
       await clearAllTasks();
       reply({ok:true});
+    }else if(message.type==='FETCH_CSDN_CATEGORIES'){
+      reply(await fetchCsdnCategories());
+    }else if(message.type==='DRY_RUN_TASK'){
+      reply(await dryRunTask(String(message.id)));
+    }else if(message.type==='GET_HEALTH_STATUS'){
+      const status=await getCachedHealth();
+      reply({ok:true,status,alert:isHealthAlert(status)});
     }
   })().catch(error=>reply({ok:false,message:error.message}));
   return true;
 });
+
+/** 系统通知点击：成功任务直达草稿编辑页，失败任务打开扩展面板查看诊断。 */
+chrome.notifications?.onClicked?.addListener(notificationId=>{
+  void (async()=>{
+    try{
+      const tasks=await allTasks();
+      const task=tasks.find(item=>item.id===notificationId);
+      await chrome.notifications.clear(notificationId).catch(()=>{});
+      if(task?.draftUrl)await chrome.tabs.create({url:task.draftUrl,active:true});
+      else await chrome.tabs.create({url:chrome.runtime.getURL('popup.html'),active:true});
+    }catch{
+      // 扩展上下文失效时静默忽略
+    }
+  })();
+});
+
+/** 远程健康检查：启动即刷新一次（12 小时缓存内跳过网络请求），此后每 12 小时强制刷新；失败静默保留旧缓存。 */
+try{
+  // SW 每次唤醒都会重跑顶层代码：同名 alarm 重复 create 会清空重置计时，必须先确认不存在再创建。
+  void (async()=>{
+    try{
+      if(!await chrome.alarms.get(HEALTH_CHECK_ALARM))await chrome.alarms.create(HEALTH_CHECK_ALARM,{periodInMinutes:720});
+    }catch{
+      // alarms 权限缺失时跳过定时检查，不影响核心同步
+    }
+  })();
+  chrome.alarms.onAlarm.addListener(alarm=>{
+    if(alarm.name===HEALTH_CHECK_ALARM)void refreshHealthIfNeeded(true);
+  });
+  void refreshHealthIfNeeded();
+}catch{
+  // alarms 权限缺失时跳过定时检查，不影响核心同步
+}

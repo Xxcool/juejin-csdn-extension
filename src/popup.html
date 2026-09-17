@@ -22,7 +22,7 @@
         <div class="brand-text-col">
           <div class="brand-name-row">
             <strong id="page-title">文章摆渡</strong>
-            <span id="brand-version" class="brand-tag">v0.5.3</span>
+            <span id="brand-version" class="brand-tag">v0.6.0</span>
           </div>
           <span class="brand-motto">一键摆渡 · 草稿安全着陆</span>
         </div>
@@ -33,13 +33,22 @@
       </button>
     </header>
 
+    <div id="health-banner" class="health-banner" hidden>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+      <div class="health-banner-text">
+        <b id="health-title">平台接口状态异常</b>
+        <small id="health-message">部分平台同步可能失败</small>
+      </div>
+      <button id="health-detail" class="text-btn" type="button">详情 ↗</button>
+    </div>
+
     <nav class="nav-segment" role="tablist">
       <div class="segment-track">
         <div class="spring-thumb" id="spring-thumb"></div>
         <button id="tab-history" class="segment-btn tab-button active" data-tab="history" role="tab" aria-selected="true" aria-controls="pane-history">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           <span>同步记录</span>
-          <span id="history-badge" class="tab-badge">0</span>
+          <span id="history-badge" class="tab-badge"></span>
         </button>
         <button id="tab-settings" class="segment-btn tab-button" data-tab="settings" role="tab" aria-selected="false" aria-controls="pane-settings">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
@@ -88,6 +97,22 @@
             </label>
             <label class="setting-item">
               <span class="setting-text">
+                <b>自动生成文章摘要</b>
+                <small>优先使用掘金摘要，缺失时截取正文前 100 字</small>
+              </span>
+              <input id="auto-summary" type="checkbox">
+              <i class="switch"></i>
+            </label>
+            <label class="setting-item">
+              <span class="setting-text">
+                <b>注入掘金首发声明</b>
+                <small>草稿末尾追加「本文首发于掘金」原文链接</small>
+              </span>
+              <input id="append-source-link" type="checkbox">
+              <i class="switch"></i>
+            </label>
+            <label class="setting-item">
+              <span class="setting-text">
                 <b>更新草稿前二次确认</b>
                 <small>已有 CSDN 草稿时，暂停并等待手动确认</small>
               </span>
@@ -112,7 +137,9 @@
           <div class="settings-group-card">
             <div class="field-item">
               <span class="field-label">默认 CSDN 分类</span>
-              <input id="default-category" class="text-input" maxlength="40" placeholder="例如：前端 / 后端 / 架构">
+              <input id="default-category" class="text-input" maxlength="40" list="csdn-category-options" placeholder="例如：前端 / 后端 / 架构">
+              <datalist id="csdn-category-options"></datalist>
+              <small class="field-hint" id="category-hint">可手动输入，或点击输入框从 CSDN 分类专栏中选择。</small>
             </div>
             <div class="field-item">
               <span class="field-label">掘金标签 → CSDN 分类映射</span>
@@ -129,12 +156,27 @@
           </div>
           <p>任务记录仅保存在当前 Chrome；插件不收集、不存储用户账号凭据，CSDN 仅生成草稿绝不替用户自动发布。</p>
           <div class="notice-footer">
-            <span id="app-version">版本 v0.5.3</span>
+            <span id="app-version">版本 v0.6.0</span>
             <a href="https://github.com/Xxcool/juejin-csdn-extension" target="_blank" rel="noreferrer">GitHub 开源 ↗</a>
           </div>
         </div>
       </div>
     </section>
+
+    <div id="dryrun-modal" class="modal-overlay" hidden>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="dryrun-title">
+        <div class="modal-header">
+          <div class="modal-title-row">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+            <b id="dryrun-title">同步预演报告</b>
+          </div>
+          <button id="dryrun-close" class="modal-close" type="button" aria-label="关闭预演报告">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div id="dryrun-body" class="modal-body"></div>
+      </div>
+    </div>
 
     <div id="toast" role="status"></div>
   </main>

@@ -1,8 +1,9 @@
 // CSDN 草稿 API 适配器：清洗 Markdown、转存图片，并直接保存到草稿箱。
 import {marked} from 'marked';
-import type {Article,ImageFailurePolicy,TaskErrorCategory,TaskProgress} from '../types';
+import type {Article,ExtensionSettings,ImageFailurePolicy,TaskErrorCategory,TaskProgress} from '../types';
 import {mapConcurrent,retry} from '../core/async';
 import {SyncError} from '../core/diagnostic';
+import {resolveCsdnCategories} from '../core/settings';
 import type {AdapterResult} from './adapter';
 
 const API='https://bizapi.csdn.net/blog-console-api/v3/mdeditor/saveArticle';
@@ -66,6 +67,29 @@ export async function checkCsdnAuth(){
 }
 
 export type CsdnArticleState='draft'|'published'|'unknown';
+
+/**
+ * 拉取当前登录用户的 CSDN 分类专栏列表。
+ * 实证来源：编辑器 getBaseInfo 接口的 data.categorys 为字符串数组（编辑器 tag-selection 组件直接按 string 消费）。
+ */
+export async function fetchCsdnCategories():Promise<{ok:boolean;categories:string[];message?:string}>{
+  const path='/blog-console-api/v3/editor/getBaseInfo';
+  try{
+    const response=await fetch(`https://bizapi.csdn.net${path}`,{method:'GET',credentials:'include',headers:await signedHeaders(path,'GET'),signal:AbortSignal.timeout(6000)});
+    if(response.status===401)return{ok:false,categories:[],message:'请先登录 CSDN'};
+    if(!response.ok)return{ok:false,categories:[],message:`CSDN 接口异常 (${response.status})`};
+    const result=await response.json() as {code?:number;data?:{categorys?:unknown;categories?:unknown}};
+    if(result.code!==200)return{ok:false,categories:[],message:'CSDN 返回错误码 '+result.code};
+    // CSDN 编辑器实测下发拼写错误的 categorys；做 categories 兼容防守，防平台某天修正拼写后失效。
+    const raw=result.data?.categorys??result.data?.categories;
+    const categories=(Array.isArray(raw)?raw:[])
+      .filter((item):item is string=>typeof item==='string'&&item.trim().length>0)
+      .map(item=>item.trim());
+    return{ok:true,categories};
+  }catch(error){
+    return{ok:false,categories:[],message:(error as Error).message||'CSDN 分类列表拉取失败'};
+  }
+}
 
 /**
  * 写入前查询 CSDN 文章当前状态：编辑器加载接口按 pubStatus / status 区分草稿与已发布。
@@ -135,6 +159,83 @@ export function sanitizeJuejinContainers(markdown:string):string{
   return output.join('\n');
 }
 
+/** 统计正文中将被转译的掘金 ::: 容器数量（代码围栏内不计），供同步预演报告展示。 */
+export function countJuejinContainers(markdown:string):number{
+  let inFence=false;
+  let fenceMarker='';
+  let count=0;
+  for(const line of markdown.split('\n')){
+    const fence=line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if(fence){
+      if(!inFence){inFence=true;fenceMarker=fence[1][0];}
+      else if(fence[1][0]===fenceMarker){inFence=false;fenceMarker='';}
+      continue;
+    }
+    if(!inFence&&/^ {0,3}:::[ \t]*[A-Za-z\u4e00-\u9fa5][\w\u4e00-\u9fa5-]*[ \t]*(.*)$/.test(line))count++;
+  }
+  return count;
+}
+
+/** 统计 Markdown 代码围栏数量，供同步预演报告展示。 */
+export function countCodeFences(markdown:string):number{
+  let count=0;
+  let inFence=false;
+  let fenceMarker='';
+  for(const line of markdown.split('\n')){
+    const fence=line.match(/^ {0,3}(`{3,}|~{3,})/);
+    if(!fence)continue;
+    if(!inFence){inFence=true;fenceMarker=fence[1][0];count++;}
+    else if(fence[1][0]===fenceMarker){inFence=false;fenceMarker='';}
+  }
+  return count;
+}
+
+/** 从 Markdown 提取纯文本摘要：剥离代码块、图片、链接、HTML 与行内标记后截取前 N 字。 */
+export function extractSummary(markdown:string,limit=100):string{
+  const text=markdown
+    .replace(/```[\s\S]*?```/g,' ')
+    .replace(/~~~[\s\S]*?~~~/g,' ')
+    .replace(/`([^`]*)`/g,'$1')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g,' ')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g,'$1')
+    .replace(/<[^>]+>/g,' ')
+    .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+\.)\s?/gm,' ')
+    .replace(/^\s{0,3}\|.*\|\s*$/gm,' ')
+    .replace(/[*_~]{1,3}/g,'')
+    .replace(/\s+/g,' ')
+    .trim();
+  return text.length<=limit?text:text.slice(0,limit);
+}
+
+/** 构建正文末尾的首发声明块；无来源链接时返回空串（不注入）。 */
+export function buildSourceAttribution(article:Article):string{
+  const url=article.sourceUrl?.trim();
+  if(!url)return'';
+  const title=article.title?.trim();
+  return`\n\n---\n\n> 本文首发于掘金${title?`：[${title}](${url})`:`：${url}`}`;
+}
+
+/** 剔除掘金图片 CDN 的 OSS 裁剪/水印参数（~tplv- 模板段与 x-oss-process 查询），失败时调用方回退原始链接。 */
+export function stripJuejinImageParams(src:string):string{
+  try{
+    const url=new URL(src);
+    if(!/(^|\.)((juejin\.cn)|(byteimg\.com)|(bytecdn\.cn))$/i.test(url.hostname))return src;
+    let changed=false;
+    const tplvIndex=url.pathname.indexOf('~tplv-');
+    if(tplvIndex>0){
+      url.pathname=url.pathname.slice(0,tplvIndex);
+      changed=true;
+    }
+    if(url.searchParams.has('x-oss-process')){
+      url.searchParams.delete('x-oss-process');
+      changed=true;
+    }
+    return changed?url.toString():src;
+  }catch{
+    return src;
+  }
+}
+
 /** 去掉掘金导出主题元数据，统一为 CSDN 支持的 Markdown 围栏，并转译掘金特有容器语法。 */
 export function normalizeMarkdown(source:string){
   let markdown=source.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');
@@ -153,14 +254,33 @@ export function imageExtension(src:string,blob:Blob){
   return mimeExtension[blob.type.toLowerCase()]||'jpg';
 }
 
-async function uploadImageToCsdn(src:string){
+async function downloadImageBlob(src:string):Promise<Blob>{
   // 掘金私有 CDN 的签名链接仍需当前登录会话；其他外链图片不携带站点凭据。
   const hostname=new URL(src).hostname;
   const credentials:RequestCredentials=hostname.endsWith('-private.juejin.cn')?'include':'omit';
-  const imageResponse=await fetch(src,{credentials});
-  if(!imageResponse.ok)throw new SyncError(`图片下载失败 (${imageResponse.status})：${src}`,statusErrorCategory(imageResponse.status)??'content','images');
-  const imageBlob=await imageResponse.blob();
-  if(!imageBlob.type.startsWith('image/'))throw new SyncError(`图片地址返回了非图片内容：${src}`,'content','images');
+  // 无水印直链优先（剔除 ~tplv- 模板与 x-oss-process 参数）；直链 403/失效时回退原始链接。
+  const direct=stripJuejinImageParams(src);
+  const attempts=direct!==src?[direct,src]:[src];
+  let lastError:unknown;
+  for(const url of attempts){
+    try{
+      const imageResponse=await fetch(url,{credentials});
+      if(!imageResponse.ok){
+        lastError=new SyncError(`图片下载失败 (${imageResponse.status})：${src}`,statusErrorCategory(imageResponse.status)??'content','images');
+        continue;
+      }
+      const imageBlob=await imageResponse.blob();
+      if(!imageBlob.type.startsWith('image/'))throw new SyncError(`图片地址返回了非图片内容：${src}`,'content','images');
+      return imageBlob;
+    }catch(error){
+      lastError=error;
+    }
+  }
+  throw lastError instanceof Error?lastError:new SyncError(`图片下载失败：${src}`,'network','images');
+}
+
+async function uploadImageToCsdn(src:string){
+  const imageBlob=await downloadImageBlob(src);
   const extension=imageExtension(src,imageBlob);
   const signaturePath='/resource-api/v1/image/direct/upload/signature';
   const signatureResponse=await fetch(`https://bizapi.csdn.net${signaturePath}`,{method:'POST',credentials:'include',headers:await signedHeaders(signaturePath,'POST'),body:JSON.stringify({imageTemplate:'',appName:'direct_blog_markdown',imageSuffix:extension})});
@@ -208,7 +328,7 @@ export function collectExternalImages(markdown:string){
 }
 
 /** CSDN 无法稳定读取掘金 CDN，保存前将正文和封面图片转存到 CSDN。 */
-type SaveDraftOptions={articleId?:string;categories?:string[];syncCover?:boolean;imageFailurePolicy?:ImageFailurePolicy;onPreparing?:()=>void|Promise<void>;onProgress?:(progress:TaskProgress)=>void|Promise<void>;onSaving?:()=>void|Promise<void>};
+type SaveDraftOptions={articleId?:string;categories?:string[];syncCover?:boolean;autoSummary?:boolean;appendSourceLink?:boolean;imageFailurePolicy?:ImageFailurePolicy;onPreparing?:()=>void|Promise<void>;onProgress?:(progress:TaskProgress)=>void|Promise<void>;onSaving?:()=>void|Promise<void>};
 type ImageTransfer={src:string;target?:string;error?:string;errorCategory?:TaskErrorCategory};
 
 export function summarizeImageTransfers(transfers:ImageTransfer[]){
@@ -233,6 +353,9 @@ export function applyImageTransfers(markdown:string,cover:string|undefined,trans
 
 async function prepareArticle(article:Article,options:SaveDraftOptions){
   let markdown=normalizeMarkdown(article.markdown);
+  // 摘要基于注入首发声明之前的正文提取，避免声明文案混入摘要。
+  const summary=article.summary?.trim()||extractSummary(markdown);
+  if(options.appendSourceLink!==false)markdown+=buildSourceAttribution(article);
   const images=collectExternalImages(markdown);
   const cover=options.syncCover===false?undefined:article.cover;
   if(cover&&!images.includes(cover))images.push(cover);
@@ -253,26 +376,31 @@ async function prepareArticle(article:Article,options:SaveDraftOptions){
   enforceImageFailurePolicy(transfers,options.imageFailurePolicy);
   const transferred=applyImageTransfers(markdown,cover,transfers);
   const html=marked.parse(transferred.markdown,{async:false,gfm:true,breaks:false}) as string;
-  return{...transferred,html,stats:summarizeImageTransfers(transfers)};
+  return{...transferred,html,summary,stats:summarizeImageTransfers(transfers)};
 }
 
-export function buildSaveArticleBody(article:Article,prepared:{markdown:string;html:string;cover?:string},articleId?:string,categories:string[]=[]){
-  return{title:article.title,markdowncontent:prepared.markdown+'\n',content:prepared.html+'\n',readType:'public',level:0,tags:article.tags?.join(',')||'',status:2,categories:[...new Set(categories.map(item=>item.trim()).filter(Boolean))].join(','),type:'original',original_link:'',authorized_status:false,not_auto_saved:'1',source:'pc_mdeditor',cover_images:prepared.cover?[prepared.cover]:[],cover_type:prepared.cover?1:0,is_new:articleId?0:1,...(articleId?{id:articleId}:{}),vote_id:0,resource_id:'',pubStatus:'draft',creation_statement:0,creator_activity_id:''};
+export function buildSaveArticleBody(article:Article,prepared:{markdown:string;html:string;cover?:string;summary?:string},articleId?:string,categories:string[]=[],autoSummary=true){
+  // CSDN 编辑器摘要字段为大写 Description；原创文章的 original_link 语义为「转载原文」，保持留空以符合平台规则。
+  return{title:article.title,markdowncontent:prepared.markdown+'\n',content:prepared.html+'\n',Description:autoSummary?prepared.summary||'':'',readType:'public',level:0,tags:article.tags?.join(',')||'',status:2,categories:[...new Set(categories.map(item=>item.trim()).filter(Boolean))].join(','),type:'original',original_link:'',authorized_status:false,not_auto_saved:'1',source:'pc_mdeditor',cover_images:prepared.cover?[prepared.cover]:[],cover_type:prepared.cover?1:0,is_new:articleId?0:1,...(articleId?{id:articleId}:{}),vote_id:0,resource_id:'',pubStatus:'draft',creation_statement:0,creator_activity_id:''};
 }
 
-/** 调用 CSDN 保存草稿 API。 */
-export async function saveDraftViaApi(article:Article,options:SaveDraftOptions={}):Promise<AdapterResult>{
+type PreparedArticle=Awaited<ReturnType<typeof prepareArticle>>;
+
+/** 调用 CSDN 保存草稿 API；400 降级新建时复用已转存的 prepared 结果，避免重复下载与上传图片。 */
+export async function saveDraftViaApi(article:Article,options:SaveDraftOptions={},prepared?:PreparedArticle):Promise<AdapterResult>{
   validateCsdnArticle(article);
   const auth=await checkCsdnAuth();
   if(!auth.ok)throw new SyncError(auth.message||'CSDN 登录状态检测失败','platform-change','authentication');
   if(!auth.loggedIn)throw new SyncError('请先登录 CSDN','login','authentication');
   await options.onPreparing?.();
-  const prepared=await prepareArticle(article,options);
-  const body=buildSaveArticleBody(article,prepared,options.articleId,options.categories);
+  const preparedResult=prepared??await prepareArticle(article,options);
+  const body=buildSaveArticleBody(article,preparedResult,options.articleId,options.categories,options.autoSummary!==false);
   await options.onSaving?.();
   const response=await fetch(API,{method:'POST',credentials:'include',headers:await signedHeaders('/blog-console-api/v3/mdeditor/saveArticle','POST'),body:JSON.stringify(body)});
   if(!response.ok){
     const text=await response.text().catch(()=>'');
+    // 更新模式下 CSDN 返回 400「该文章不存在」（草稿已被用户在 CSDN 删除等）：自动降级为新建草稿，避免任务因旧 articleId 永久卡死。
+    if(response.status===400&&options.articleId&&text.includes('该文章不存在'))return saveDraftViaApi(article,{...options,articleId:undefined},preparedResult);
     throw new SyncError('CSDN API 请求失败 ('+response.status+')'+(text?': '+text.slice(0,120):''),statusErrorCategory(response.status)??'platform-change','draft');
   }
   const result=await response.json() as {code?:number;msg?:string;message?:string;data?:{id?:string;article_id?:string;url?:string}};
@@ -280,5 +408,50 @@ export async function saveDraftViaApi(article:Article,options:SaveDraftOptions={
   const articleId=result.data?.id||result.data?.article_id;
   const draftUrl=result.data?.url||(articleId?'https://editor.csdn.net/md/?articleId='+articleId:'');
   if(!draftUrl||!articleId)throw new SyncError('CSDN 已保存草稿，但没有返回草稿标识','platform-change','draft');
-  return{draftUrl,articleId:String(articleId),warnings:prepared.warnings,stats:prepared.stats};
+  return{draftUrl,articleId:String(articleId),warnings:preparedResult.warnings,stats:preparedResult.stats};
+}
+
+/** 同步预演报告：执行除图片转存与草稿写入外的全部分析，供用户在确认前评估风险。issues 为风险/警告，notices 为功能告知。 */
+export type DryRunReport={
+  titleLength:number;
+  contentLength:number;
+  summaryPreview:string;
+  categories:string[];
+  imageCount:number;
+  images:string[];
+  containerCount:number;
+  codeFenceCount:number;
+  issues:string[];
+  notices:string[];
+};
+
+export function buildDryRunReport(article:Article,settings:ExtensionSettings):DryRunReport{
+  const markdown=normalizeMarkdown(article.markdown);
+  // 容器计数基于转译前的原始正文：normalizeMarkdown 已把 ::: 容器转译为引用块，事后统计恒为 0。
+  const rawMarkdown=article.markdown.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');
+  const issues:string[]=[];
+  const title=article.title.trim();
+  if(title.length<5)issues.push(`标题 ${title.length} 字，少于 CSDN 要求的 5 字下限`);
+  if(title.length>100)issues.push(`标题 ${title.length} 字，超过 CSDN 的 100 字上限`);
+  if(markdown.length<20)issues.push('正文内容过短，不满足同步要求');
+  const images=collectExternalImages(markdown);
+  if(images.length>50)issues.push(`外链图片多达 ${images.length} 张，转存耗时较长`);
+  const categories=resolveCsdnCategories(article.tags,settings);
+  if(!categories.length)issues.push('未命中任何 CSDN 分类（可在偏好设置中配置默认分类或标签映射）');
+  // 首发声明注入是默认功能告知而非风险，单独走 notices，避免风险清单常黄。
+  const notices:string[]=[];
+  const attribution=buildSourceAttribution(article);
+  if(attribution&&settings.appendSourceLink!==false)notices.push(`将在正文末尾注入首发声明（掘金原文：${article.sourceUrl}）`);
+  return{
+    titleLength:title.length,
+    contentLength:markdown.length,
+    summaryPreview:settings.autoSummary===false?'':(article.summary?.trim()||extractSummary(markdown)),
+    categories,
+    imageCount:images.length,
+    images:images.slice(0,20),
+    containerCount:countJuejinContainers(rawMarkdown),
+    codeFenceCount:countCodeFences(markdown),
+    issues,
+    notices
+  };
 }

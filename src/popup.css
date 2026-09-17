@@ -102,6 +102,11 @@
   padding: 0;
 }
 
+/* hidden 属性防御：任何 class 的 display 规则（如弹窗的 flex）都不得覆盖原生隐藏语义 */
+[hidden] {
+  display: none !important;
+}
+
 body {
   width: 380px;
   height: 470px;
@@ -376,6 +381,11 @@ main {
   color: var(--brand);
 }
 
+/* 数量为 0 时置空文本，同时隐藏胶囊本身，避免残留空背景 */
+.tab-badge:empty {
+  display: none;
+}
+
 /* 3. 面板 PANE */
 .tab-pane {
   display: none;
@@ -502,6 +512,7 @@ main {
 }
 
 .history-card {
+  flex-shrink: 0;
   background: var(--bg-card);
   border-radius: 14px;
   border: 1px solid var(--border);
@@ -535,6 +546,7 @@ main {
   display: flex;
   align-items: flex-start;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 .history-cover {
@@ -631,6 +643,7 @@ main {
   padding-top: 9px;
   border-top: 1px solid var(--border-divider);
   font-size: 11px;
+  flex-shrink: 0;
 }
 
 .task-stats {
@@ -1064,6 +1077,7 @@ main {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 .settings-kicker {
@@ -1285,4 +1299,298 @@ main {
 #toast.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+/* 9. 健康警示条 */
+.health-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 14px 0;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  color: var(--warning-text);
+}
+
+.health-banner svg {
+  flex-shrink: 0;
+}
+
+.health-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.health-banner-text b {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--warning-text);
+}
+
+.health-banner-text small {
+  font-size: 10.5px;
+  color: var(--warning-text);
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 10. 预演按钮 */
+.btn-action-dryrun {
+  padding: 4px 9px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.btn-action-dryrun:hover:not(:disabled) {
+  border-color: var(--working-border);
+  color: var(--working-text);
+  background: var(--working-bg);
+}
+
+.btn-action-dryrun:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.btn-action-dryrun:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* 11. 同步预演模态 */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 900;
+  animation: modal-fade-in 0.18s var(--spring-smooth);
+}
+
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal-card {
+  width: 336px;
+  max-height: 420px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg), var(--hairline-top);
+  animation: modal-pop-in 0.22s var(--spring-snappy);
+  overflow: hidden;
+}
+
+@keyframes modal-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.modal-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--border-divider);
+}
+
+.modal-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-title);
+  font-size: 12.5px;
+}
+
+.modal-title-row svg {
+  color: var(--brand);
+}
+
+.modal-close {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.modal-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-body);
+}
+
+.modal-body {
+  flex: 1;
+  min-height: 0;
+  padding: 12px 14px 14px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.modal-body > * {
+  flex-shrink: 0;
+}
+
+.dryrun-task-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-title);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.dryrun-grid {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-divider);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.dryrun-row {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  font-size: 11.5px;
+}
+
+.dryrun-row:not(:last-child) {
+  border-bottom: 1px solid var(--border-divider);
+}
+
+.dryrun-row span {
+  color: var(--text-muted);
+}
+
+.dryrun-row b {
+  color: var(--text-title);
+  font-weight: 600;
+  text-align: right;
+}
+
+.dryrun-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--bg-subtle);
+}
+
+.dryrun-summary-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dryrun-summary p {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-body);
+}
+
+.dryrun-issues {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+}
+
+.dryrun-issues p {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--warning-text);
+}
+
+.dryrun-issues.ok {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+}
+
+.dryrun-issues.ok p {
+  color: var(--success-text);
+}
+
+/* 功能告知（如首发声明注入）：中性蓝，区别于黄色风险提示 */
+.dryrun-notices {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--working-bg);
+  border: 1px solid var(--working-border);
+}
+
+.dryrun-notices p {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--working-text);
+}
+
+/* 独立标签页打开 popup.html（通知点击兜底）时视口居中；380px 的 popup 视口不会命中该查询 */
+@media screen and (min-width: 600px) {
+  body {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  main {
+    width: 380px;
+    height: 470px;
+    border-radius: 14px;
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+  }
 }

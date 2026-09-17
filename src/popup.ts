@@ -22,6 +22,7 @@ const labels:Record<TaskStatus,string>={
 };
 
 let toastTimer=0;
+let currentTasksCache:SyncTask[]=[];
 function toast(message:string){
   const element=$('#toast');
   element.textContent=message;
@@ -48,7 +49,7 @@ function switchTab(tab:'history'|'settings'){
   historyPane.hidden=tab!=='history';
   settingsPane.hidden=tab!=='settings';
   if(tab==='history')void loadTasks();
-  if(tab==='settings')void loadSettings();
+  if(tab==='settings'){void loadSettings();void loadCsdnCategories();}
 }
 
 async function checkLogin(){
@@ -127,6 +128,7 @@ function taskCard(task:SyncTask){
   const cover=task.article.cover?`<img src="${escapeHtml(task.article.cover)}" alt="">`:'';
   const actions=[];
   if(task.draftUrl)actions.push(`<button class="history-action btn-action-primary" data-open="${escapeHtml(task.draftUrl)}">草稿 ↗</button>`);
+  if(!['queued','checking-login','transforming','writing'].includes(task.status))actions.push(`<button class="history-action btn-action-dryrun" data-dryrun="${escapeHtml(task.id)}" title="同步预演：查看分类命中、图片转存与内容风险，不写入 CSDN">预演</button>`);
   if(task.status==='needs-confirmation')actions.push(`<button class="history-action confirm btn-action-confirm" data-confirm="${escapeHtml(task.id)}">确认更新</button>`);
   if(['failed','needs-user'].includes(task.status))actions.push(`<button class="history-action retry btn-action-retry" data-retry="${escapeHtml(task.id)}">重试</button>`);
   if(!['queued','checking-login','transforming','writing'].includes(task.status))actions.push(`<button class="history-action delete btn-action-delete" data-delete="${escapeHtml(task.id)}" title="删除本地记录" aria-label="删除本地记录"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>`);
@@ -171,6 +173,7 @@ async function loadTasks(){
   try{
     const result=await chrome.runtime.sendMessage({type:'GET_TASKS'});
     const all=((result?.tasks||[]) as SyncTask[]).sort((a,b)=>Date.parse(b.updatedAt)-Date.parse(a.updatedAt));
+    currentTasksCache=all;
     const tasks=all.filter(task=>historyFilter==='all'||(historyFilter==='saved'?task.status==='saved':historyFilter==='failed'?['failed','needs-user'].includes(task.status):['queued','checking-login','transforming','writing','needs-confirmation'].includes(task.status)));
     const list=$('#task-list');
     
@@ -189,7 +192,7 @@ async function loadTasks(){
 
     $('#history-count').textContent=historyFilter==='all'?'':`${tasks.length}/${all.length} 篇`;
     const badge=$('#history-badge');
-    badge.textContent=String(all.length);
+    badge.textContent=all.length?String(all.length):'';
     const clearButton=$<HTMLButtonElement>('#history-clear');
     clearButton.disabled=!all.length;
     $<HTMLButtonElement>('#history-retry-all').disabled=!all.some(task=>['failed','needs-user'].includes(task.status));
@@ -243,6 +246,7 @@ async function loadTasks(){
     list.innerHTML=tasks.map(taskCard).join('');
     list.querySelectorAll<HTMLImageElement>('.history-cover img').forEach(image=>image.addEventListener('error',()=>image.remove()));
     list.querySelectorAll<HTMLButtonElement>('[data-open]').forEach(button=>button.addEventListener('click',()=>void chrome.tabs.create({url:button.dataset.open,active:true})));
+    list.querySelectorAll<HTMLButtonElement>('[data-dryrun]').forEach(button=>button.addEventListener('click',()=>void runDryRun(button.dataset.dryrun||'',button)));
     list.querySelectorAll<HTMLButtonElement>('[data-copy-diag]').forEach(button=>button.addEventListener('click',async()=>{
       const text=button.dataset.copyDiag||'';
       if(!text)return;
@@ -281,6 +285,8 @@ async function loadTasks(){
 function renderSettings(settings:ExtensionSettings){
   $<HTMLInputElement>('#auto-sync').checked=settings.autoSyncAfterPublish;
   $<HTMLInputElement>('#sync-cover').checked=settings.syncCover;
+  $<HTMLInputElement>('#auto-summary').checked=settings.autoSummary;
+  $<HTMLInputElement>('#append-source-link').checked=settings.appendSourceLink;
   $<HTMLInputElement>('#confirm-update').checked=settings.confirmDraftUpdate;
   $<HTMLSelectElement>('#image-failure').value=settings.imageFailurePolicy;
   $<HTMLInputElement>('#default-category').value=settings.defaultCsdnCategory;
@@ -291,6 +297,8 @@ async function saveSettingsFromForm(){
   currentSettings=normalizeSettings({
     autoSyncAfterPublish:$<HTMLInputElement>('#auto-sync').checked,
     syncCover:$<HTMLInputElement>('#sync-cover').checked,
+    autoSummary:$<HTMLInputElement>('#auto-summary').checked,
+    appendSourceLink:$<HTMLInputElement>('#append-source-link').checked,
     confirmDraftUpdate:$<HTMLInputElement>('#confirm-update').checked,
     imageFailurePolicy:$<HTMLSelectElement>('#image-failure').value,
     defaultCsdnCategory:$<HTMLInputElement>('#default-category').value,
@@ -306,6 +314,84 @@ async function loadSettings(){
   const result=await chrome.runtime.sendMessage({type:'GET_SETTINGS'});
   currentSettings=normalizeSettings(result?.settings);
   renderSettings(currentSettings);
+}
+
+/** 拉取 CSDN 分类专栏填充下拉建议；失败时静默降级为纯手输，不阻塞设置页。 */
+async function loadCsdnCategories(){
+  const hint=$('#category-hint');
+  try{
+    const result=await chrome.runtime.sendMessage({type:'FETCH_CSDN_CATEGORIES'});
+    if(!result?.ok||!Array.isArray(result.categories)||!result.categories.length){
+      if(result?.message)hint.textContent=`分类拉取失败（${result.message}），可直接手动输入。`;
+      return;
+    }
+    const datalist=$('#csdn-category-options');
+    datalist.innerHTML=(result.categories as string[]).slice(0,100).map(name=>`<option value="${escapeHtml(name)}"></option>`).join('');
+    hint.textContent=`已载入你账号下的 ${result.categories.length} 个 CSDN 分类专栏，点击输入框选择。`;
+  }catch{
+    hint.textContent='分类拉取失败，可直接手动输入。';
+  }
+}
+
+/** 远程健康状态：仅任一平台 broken 时展示警示条，点击详情跳转公开状态页。 */
+async function checkHealthBanner(){
+  const banner=$('#health-banner');
+  try{
+    const result=await chrome.runtime.sendMessage({type:'GET_HEALTH_STATUS'});
+    if(!result?.alert)return;
+    const status=result.status;
+    const broken=status?.csdn==='broken'?'CSDN':'掘金';
+    $('#health-title').textContent=`${broken}接口状态异常`;
+    $('#health-message').textContent=status?.message||'平台接口近期变动，同步可能失败';
+    banner.hidden=false;
+  }catch{
+    // 后台不可达时静默隐藏
+  }
+}
+
+const STATUS_PAGE_URL='https://xxcool.github.io/juejin-csdn-extension/status.html';
+
+type DryRunReport={titleLength:number;contentLength:number;summaryPreview:string;categories:string[];imageCount:number;images:string[];containerCount:number;codeFenceCount:number;issues:string[];notices:string[]};
+
+function closeDryRunModal(){
+  $('#dryrun-modal').hidden=true;
+}
+
+function showDryRunModal(task:SyncTask,report:DryRunReport){
+  const rows=[
+    {label:'标题长度',value:`${report.titleLength} / 100 字`},
+    {label:'正文字数',value:`约 ${report.contentLength} 字符`},
+    {label:'命中分类',value:report.categories.length?report.categories.join('、'):'未命中（将不设置分类）'},
+    {label:'待转存图片',value:report.imageCount?`${report.imageCount} 张外链图片`:'无外链图片'},
+    {label:'容器转换',value:report.containerCount?`${report.containerCount} 个 ::: 容器将转为引用块`:'无掘金特有容器'},
+    {label:'代码围栏',value:`${report.codeFenceCount} 个`}
+  ];
+  const summary=report.summaryPreview?`<div class="dryrun-summary"><span class="dryrun-summary-label">摘要预览</span><p>${escapeHtml(report.summaryPreview)}</p></div>`:'';
+  const issues=report.issues.length?`<div class="dryrun-issues">${report.issues.map(item=>`<p>· ${escapeHtml(item)}</p>`).join('')}</div>`:'<div class="dryrun-issues ok"><p>· 未发现阻断风险，可放心同步</p></div>';
+  const notices=report.notices.length?`<div class="dryrun-notices">${report.notices.map(item=>`<p>· ${escapeHtml(item)}</p>`).join('')}</div>`:'';
+  $('#dryrun-body').innerHTML=`
+    <b class="dryrun-task-title" title="${escapeHtml(task.article.title)}">${escapeHtml(task.article.title)}</b>
+    <div class="dryrun-grid">${rows.map(row=>`<div class="dryrun-row"><span>${row.label}</span><b>${escapeHtml(row.value)}</b></div>`).join('')}</div>
+    ${summary}
+    ${issues}
+    ${notices}`;
+  $('#dryrun-modal').hidden=false;
+}
+
+async function runDryRun(taskId:string,button:HTMLButtonElement){
+  button.disabled=true;
+  const original=button.innerHTML;
+  button.innerHTML='<span>预演中…</span>';
+  try{
+    const result=await chrome.runtime.sendMessage({type:'DRY_RUN_TASK',id:taskId});
+    if(!result?.ok){toast(result?.message||'预演失败');return;}
+    showDryRunModal(currentTasksCache.find(item=>item.id===taskId)||{article:{title:''}} as SyncTask,result.report as DryRunReport);
+  }catch(error){
+    toast((error as Error).message);
+  }finally{
+    button.disabled=false;
+    button.innerHTML=original;
+  }
 }
 
 document.querySelectorAll<HTMLButtonElement>('.tab-button').forEach(button=>{
@@ -347,8 +433,17 @@ $<HTMLButtonElement>('#history-clear').addEventListener('click',async()=>{
   await loadTasks();
 });
 
-['#auto-sync','#sync-cover','#confirm-update','#image-failure'].forEach(selector=>$(selector).addEventListener('change',()=>void saveSettingsFromForm()));
+['#auto-sync','#sync-cover','#auto-summary','#append-source-link','#confirm-update','#image-failure'].forEach(selector=>$(selector).addEventListener('change',()=>void saveSettingsFromForm()));
 ['#default-category','#category-mappings'].forEach(selector=>$(selector).addEventListener('change',()=>void saveSettingsFromForm()));
+
+$('#health-detail').addEventListener('click',()=>void chrome.tabs.create({url:STATUS_PAGE_URL,active:true}));
+$('#dryrun-close').addEventListener('click',closeDryRunModal);
+$('#dryrun-modal').addEventListener('click',event=>{
+  if(event.target===$('#dryrun-modal'))closeDryRunModal();
+});
+document.addEventListener('keydown',event=>{
+  if(event.key==='Escape'&&!$('#dryrun-modal').hidden)closeDryRunModal();
+});
 
 chrome.storage.onChanged.addListener((changes,area)=>{
   if(area==='local'&&changes.syncTasks&&$('#pane-history').classList.contains('active'))void loadTasks();
@@ -366,5 +461,7 @@ try{
 
 void loadTasks();
 void loadSettings();
+void loadCsdnCategories();
 void checkLogin();
+void checkHealthBanner();
 
