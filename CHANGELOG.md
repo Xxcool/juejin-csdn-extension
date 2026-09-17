@@ -2,6 +2,18 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [0.6.1] - 2026-09-17
+
+### ✨ 体验与品牌
+
+- 全量统一「文章摆渡」官方品牌标识：采用工业级 1024x1024 超采样与 Lanczos 抗锯齿渲染，将 Chrome 扩展管理页大图标、浏览器工具栏图标、视网膜 SVG 及 Favicon 全面升级为「一叶轻舟破浪 ⛵」专属舰徽，彻底淘汰旧版双文档复制图标。
+- 接入全新独立官方展示与文档站点：弹窗「关于」卡片、README 与项目主页全面对齐极简生产域名 [artferry.vercel.app](https://artferry.vercel.app)。
+
+### 🛠️ 工程与架构
+
+- 文档站点与插件工程彻底解耦：官方站点独立上线至专用仓库 [Xxcool/artferry](https://github.com/Xxcool/artferry)，主仓库取消 `docs/` 索引跟踪并通过 `.gitignore` 永久忽略本地设计规划草稿。
+- 优化 README 图标引用为相对路径，根除 GitHub Camo CDN 代理对 raw 图片历史缓存陈旧的问题。
+
 ## [0.6.0] - 2026-09-17
 
 ### ✨ 新增
