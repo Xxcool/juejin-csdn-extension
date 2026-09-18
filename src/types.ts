@@ -1,4 +1,4 @@
-export type PlatformId='csdn';
+export type PlatformId='csdn'|'wechat';
 export type Article={id:string;sourceDraftId?:string;title:string;markdown:string;summary?:string;cover?:string;tags:string[];sourceUrl:string};
 export type TaskStatus='queued'|'checking-login'|'transforming'|'writing'|'saved'|'failed'|'needs-user'|'needs-confirmation';
 export type TaskProgress={current:number;total:number;message:string};
@@ -6,10 +6,13 @@ export type TaskStage='validation'|'authentication'|'content'|'images'|'draft'|'
 export type TaskErrorCategory='login'|'network'|'rate-limit'|'platform-change'|'content'|'blocked'|'interrupted'|'unknown';
 export type TaskDiagnostic={stage:TaskStage;category:TaskErrorCategory;message:string;suggestion:string;occurredAt:string};
 export type TaskStats={imageTotal:number;imageSucceeded:number;imageFailed:number;durationMs:number};
-export type SyncTask={id:string;article:Article;platform:PlatformId;status:TaskStatus;createdAt:string;updatedAt:string;draftUrl?:string;csdnArticleId?:string;error?:string;diagnostic?:TaskDiagnostic;warnings?:string[];progress?:TaskProgress;stats?:TaskStats;attempts:number};
+// 微信任务绑定稳定公众号标识；令牌与票据不参与任务身份。
+export type SyncTask={id:string;article:Article;platform:PlatformId;wechatAccountId?:string;status:TaskStatus;createdAt:string;updatedAt:string;draftUrl?:string;csdnArticleId?:string;wechatAppMsgId?:string;error?:string;diagnostic?:TaskDiagnostic;warnings?:string[];progress?:TaskProgress;stats?:TaskStats;attempts:number};
 export type CsdnDraftMapping={articleId:string;csdnArticleId:string;draftUrl?:string;updatedAt:string};
+export type WechatDraftMapping={articleId:string;wechatAccountId?:string;wechatAppMsgId:string;draftUrl?:string;updatedAt:string};
+export type PlatformDraftMapping=CsdnDraftMapping|WechatDraftMapping;
 export type PlatformState={id:PlatformId;name:string;loggedIn:'unknown'|'yes'|'no'};
 export type CategoryMapping={sourceTag:string;targetCategory:string};
 export type ImageFailurePolicy='continue'|'abort';
-export type ExtensionSettings={autoSyncAfterPublish:boolean;defaultCsdnCategory:string;categoryMappings:CategoryMapping[];syncCover:boolean;autoSummary:boolean;appendSourceLink:boolean;imageFailurePolicy:ImageFailurePolicy;confirmDraftUpdate:boolean};
+export type ExtensionSettings={autoSyncAfterPublish:boolean;wechatAutoSync:boolean;defaultCsdnCategory:string;categoryMappings:CategoryMapping[];syncCover:boolean;autoSummary:boolean;appendSourceLink:boolean;imageFailurePolicy:ImageFailurePolicy;confirmDraftUpdate:boolean};
 export const uid=()=>crypto.randomUUID();

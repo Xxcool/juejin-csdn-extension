@@ -1,19 +1,21 @@
-// 掘金页面主世界桥接：读取编辑器实例中的原始 Markdown，并缓存草稿接口返回的已选标签。
+// 掘金页面主世界桥接：读取 Markdown，并按草稿身份缓存标签、封面和摘要。
+import {EditorMetadataCache} from './source/editor-metadata';
 const READ_EDITOR_EVENT='article-ferry:read-editor';
 const SNAPSHOT_ATTRIBUTE='data-article-ferry-editor';
 const DRAFT_TAG_ENDPOINT=/article_draft\/(?:save|detail)/;
 
 type CodeMirrorElement=HTMLElement&{CodeMirror?:{getValue():string}};
-type DraftPayload={data?:{article_draft?:{tags?:{tag_name?:string}[]};tags?:{tag_name?:string}[]}};
+type DraftPayload={data?:{article_draft?:{id?:string;tags?:{tag_name?:string}[];cover_image?:string;brief?:string};tags?:{tag_name?:string}[];cover_image?:string;brief?:string}};
 
-let cachedTags:string[]=[];
+const metadata=new EditorMetadataCache();
+const currentDraftId=()=>location.pathname.match(/\/editor\/drafts\/(\d+)/)?.[1]||'';
 
-function rememberTags(url:string,text:string){
+function rememberTags(url:string,text:string,requestDraftId:string){
   if(!DRAFT_TAG_ENDPOINT.test(url))return;
   try{
     const draft=JSON.parse(text) as DraftPayload;
-    const tags=draft.data?.article_draft?.tags||draft.data?.tags;
-    if(Array.isArray(tags))cachedTags=tags.map(tag=>tag?.tag_name||'').filter(Boolean);
+    const value=draft.data?.article_draft||draft.data;
+    if(value)metadata.remember(draft.data?.article_draft?.id||requestDraftId,value);
   }catch{}
 }
 
@@ -23,10 +25,11 @@ function observeDraftApi(){
     Object.defineProperty(window,'__articleFerryHooked',{value:true,enumerable:false});
     const originalFetch=window.fetch.bind(window);
     window.fetch=async(input,init)=>{
+      const requestDraftId=currentDraftId();
       const response=await originalFetch(input,init);
       try{
         const url=input instanceof Request?input.url:String(input);
-        if(DRAFT_TAG_ENDPOINT.test(url))rememberTags(url,await response.clone().text());
+        if(DRAFT_TAG_ENDPOINT.test(url))rememberTags(url,await response.clone().text(),requestDraftId);
       }catch{}
       return response;
     };
@@ -37,8 +40,9 @@ function observeDraftApi(){
       return originalOpen.apply(this,[method,url,...rest] as Parameters<typeof originalOpen>);
     };
     XMLHttpRequest.prototype.send=function(this:XMLHttpRequest&{__ferryUrl?:string},...args:unknown[]){
+      const requestDraftId=currentDraftId();
       this.addEventListener('load',()=>{
-        try{rememberTags(this.__ferryUrl||'',this.responseText);}catch{}
+        try{rememberTags(this.__ferryUrl||'',this.responseText,requestDraftId);}catch{}
       });
       return originalSend.apply(this,args as Parameters<typeof originalSend>);
     };
@@ -51,7 +55,7 @@ function editorSnapshot(){
   const textarea=document.querySelector<HTMLTextAreaElement>('.CodeMirror textarea,textarea.bytemd-hidden');
   const markdown=codeMirror?.getValue()||textarea?.value||'';
   const draftId=location.pathname.match(/\/editor\/drafts\/(\d+)/)?.[1]||'';
-  return{title:titleInput?.value.trim()||'',markdown,draftId,sourceUrl:location.href,tags:cachedTags};
+  return{title:titleInput?.value.trim()||'',markdown,draftId,sourceUrl:location.href,...metadata.get(draftId)};
 }
 
 observeDraftApi();

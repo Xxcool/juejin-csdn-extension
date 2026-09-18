@@ -34,7 +34,8 @@ async function fetchDraftContent(draftId:string,uuid:string){
   if(markdown.length<20)throw new SyncError('掘金草稿正文为空或过短','content','content');
   // brief 为作者在掘金发布面板手填的文章摘要；缺失时交由 CSDN 侧自动提取兜底。
   const summary=draft?.brief?.trim()||undefined;
-  return{title:draft?.title?.trim()||'',markdown,summary,tags:(draft?.tags||[]).map(tag=>tag.tag_name||'').filter(Boolean),cover:draft?.cover_image||undefined};
+  // 空字符串是已确认无封面，不能再用文章列表里的旧封面覆盖。
+  return{title:draft?.title?.trim()||'',markdown,summary,tags:(draft?.tags||[]).map(tag=>tag.tag_name||'').filter(Boolean),cover:draft?.cover_image};
 }
 
 /** 新文章（已知掘金草稿 ID）直接读取草稿详情，用于重试时回填被瘦身的正文。 */
@@ -76,7 +77,7 @@ export async function fetchJuejinDraftByArticleId(articleId:string,uuid:string,t
     markdown:content.markdown,
     summary:content.summary,
     tags:content.tags.length?content.tags:(entry?.tags||[]).map(tag=>tag.tag_name||'').filter(Boolean),
-    cover:content.cover||entry?.article_info?.cover_image||undefined,
+    cover:content.cover??entry?.article_info?.cover_image,
     sourceUrl:`https://juejin.cn/post/${articleId}`
   };
 }

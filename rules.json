@@ -110,5 +110,21 @@
       "excludedInitiatorDomains": ["csdn.net"],
       "resourceTypes": ["xmlhttprequest"]
     }
+  },
+  {
+    "id": 8,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {"header": "Origin", "operation": "set", "value": "https://mp.weixin.qq.com"},
+        {"header": "Referer", "operation": "set", "value": "https://mp.weixin.qq.com/"}
+      ]
+    },
+    "condition": {
+      "urlFilter": "||mp.weixin.qq.com/cgi-bin/",
+      "excludedInitiatorDomains": ["mp.weixin.qq.com"],
+      "resourceTypes": ["xmlhttprequest"]
+    }
   }
 ]

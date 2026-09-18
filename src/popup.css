@@ -165,6 +165,8 @@ main {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+  flex: 0 0 auto;
 }
 
 .ferry-emblem {
@@ -196,6 +198,7 @@ main {
   font-weight: 700;
   color: var(--text-title);
   letter-spacing: -0.015em;
+  white-space: nowrap;
 }
 
 .brand-tag {
@@ -213,7 +216,13 @@ main {
   letter-spacing: 0.01em;
 }
 
-/* 动态状态微胶囊 */
+/* 平台状态下拉：顶栏只展示当前平台，避免多个账号胶囊挤压品牌区域。 */
+.platform-switcher {
+  position: relative;
+  min-width: 0;
+  margin-left: auto;
+}
+
 .platform-pill {
   display: inline-flex;
   align-items: center;
@@ -229,7 +238,67 @@ main {
   transition: all 0.2s;
   text-decoration: none;
   font-family: inherit;
+  max-width: 168px;
+  min-height: 32px;
 }
+
+.platform-pill .platform-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.platform-chevron {
+  flex: 0 0 auto;
+  transition: transform 0.18s ease;
+}
+
+.platform-pill[aria-expanded="true"] .platform-chevron { transform: rotate(180deg); }
+
+.platform-menu {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 7px);
+  right: 0;
+  width: 228px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-lg);
+}
+
+.platform-option {
+  width: 100%;
+  min-height: 40px;
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-body);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.platform-option:hover,
+.platform-option:focus-visible { background: var(--bg-hover); outline: none; }
+.platform-option .platform-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.platform-check { color: var(--brand); font-weight: 700; opacity: 0; }
+.platform-option.selected .platform-check { opacity: 1; }
+.platform-option.logged { color: var(--success-text); }
+.platform-option.logged .platform-dot { background: var(--success); }
+.platform-option.login-link { color: var(--warning-text); }
+.platform-option.login-link .platform-dot { background: var(--warning); }
+.platform-option.error { color: var(--danger-text); }
+.platform-option.error .platform-dot { background: var(--danger); }
+.platform-option.checking .platform-dot { background: var(--brand); animation: pulse 1s infinite; }
 
 .platform-pill:active {
   transform: scale(0.96);
@@ -595,10 +664,17 @@ main {
 
 .task-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   font-size: 11px;
   color: var(--text-faint);
+}
+
+/* 平台和状态保持完整，时间作为整体在空间不足时换行。 */
+.task-meta > span {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .state-tag {
@@ -634,6 +710,42 @@ main {
   background: var(--warning-bg);
   color: var(--warning-text);
   border: 1px solid var(--warning-border);
+}
+
+.platform-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1.5px 6px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.platform-badge.csdn {
+  background: rgba(252, 85, 49, 0.1);
+  color: #e33f20;
+  border: 1px solid rgba(252, 85, 49, 0.28);
+}
+
+.platform-badge.wechat {
+  background: rgba(7, 169, 79, 0.1);
+  color: #07a94f;
+  border: 1px solid rgba(7, 169, 79, 0.28);
+}
+
+@media (prefers-color-scheme: dark) {
+  .platform-badge.csdn {
+    background: rgba(252, 85, 49, 0.18);
+    color: #ff7557;
+    border-color: rgba(252, 85, 49, 0.35);
+  }
+  .platform-badge.wechat {
+    background: rgba(7, 169, 79, 0.18);
+    color: #26d473;
+    border-color: rgba(7, 169, 79, 0.35);
+  }
 }
 
 .task-bottom-row {

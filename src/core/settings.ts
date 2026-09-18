@@ -3,6 +3,7 @@ import type {CategoryMapping,ExtensionSettings} from '../types';
 
 export const defaultSettings:ExtensionSettings={
   autoSyncAfterPublish:true,
+  wechatAutoSync:true,
   defaultCsdnCategory:'',
   categoryMappings:[],
   syncCover:true,
@@ -19,6 +20,7 @@ export function normalizeSettings(value:unknown):ExtensionSettings{
   const mappings=Array.isArray(input.categoryMappings)?input.categoryMappings.map(item=>({sourceTag:clean(item?.sourceTag),targetCategory:clean(item?.targetCategory)})).filter(item=>item.sourceTag&&item.targetCategory):[];
   return{
     autoSyncAfterPublish:input.autoSyncAfterPublish!==false,
+    wechatAutoSync:input.wechatAutoSync!==false,
     defaultCsdnCategory:clean(input.defaultCsdnCategory),
     categoryMappings:mappings,
     syncCover:input.syncCover!==false,

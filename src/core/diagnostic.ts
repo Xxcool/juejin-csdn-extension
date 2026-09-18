@@ -2,13 +2,13 @@
 import type {TaskDiagnostic,TaskErrorCategory,TaskStage} from '../types';
 
 const suggestions:Record<TaskErrorCategory,string>={
-  login:'请登录 CSDN 后重新同步。',
+  login:'请登录对应目标平台后重新同步。',
   network:'请检查网络连接，稍后重新同步。',
   'rate-limit':'平台请求过于频繁，请稍后再试。',
   'platform-change':'平台接口或页面可能已更新，请升级插件或反馈此问题。',
   content:'请检查文章标题、正文和图片后重新同步。',
-  blocked:'该 CSDN 文章已公开发布，为保护线上内容已阻断覆盖。如需重新同步，请删除对应记录后另存为新草稿。',
-  interrupted:'请先检查 CSDN 草稿箱，再决定是否重试。',
+  blocked:'请核对目标账号与草稿归属，并按错误提示处理；不要直接重复写入。',
+  interrupted:'请先检查目标平台草稿箱，确认保存结果后再决定是否重试。',
   unknown:'请稍后重试；若持续失败，请复制此诊断信息进行反馈。'
 };
 

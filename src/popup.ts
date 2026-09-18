@@ -2,13 +2,46 @@
 import type {ExtensionSettings,SyncTask,TaskStatus} from './types';
 import {categoryLabels,stageLabels} from './core/diagnostic';
 import {defaultSettings,formatCategoryMappings,normalizeSettings,parseCategoryMappings} from './core/settings';
+import {isRetryableTask} from './core/task';
 
 const $=<T extends HTMLElement>(selector:string)=>document.querySelector<T>(selector)!;
-let loginStatus:'checking'|'logged-in'|'logged-out'|'error'='checking';
+type LoginStatus='checking'|'logged-in'|'logged-out'|'error';
+let loginStatus:LoginStatus='checking';
+let wechatLoginStatus:LoginStatus='checking';
+let selectedPlatform:'csdn'|'wechat'='csdn';
+let csdnAccount='';
+let wechatAccount='';
 let checkSequence=0;
 let historyFilter:'all'|'saved'|'failed'|'working'='all';
 let currentSettings:ExtensionSettings=defaultSettings;
 let currentTab:'history'|'settings'='history';
+
+function renderPlatformTrigger(){
+  const trigger=$('#platform-trigger');
+  const status=selectedPlatform==='csdn'?loginStatus:wechatLoginStatus;
+  const account=selectedPlatform==='csdn'?csdnAccount:wechatAccount;
+  const name=selectedPlatform==='csdn'?'CSDN':'微信';
+  trigger.className=`platform-pill ${status==='logged-in'?'logged':status==='logged-out'?'login-link':status}`;
+  $('#platform-trigger-text').textContent=status==='checking'?`${name} 检测中…`:status==='logged-in'?`${name}${account?` · ${account}`:''} ✓`:status==='logged-out'?`${name} 未登录`: `${name} 检测失败`;
+}
+
+function setPlatformMenu(open:boolean){
+  const trigger=$('#platform-trigger');
+  const menu=$('#platform-menu');
+  trigger.setAttribute('aria-expanded',String(open));
+  menu.hidden=!open;
+}
+
+function selectPlatform(platform:'csdn'|'wechat'){
+  selectedPlatform=platform;
+  document.querySelectorAll<HTMLButtonElement>('.platform-option').forEach(option=>{
+    const selected=option.dataset.platform===platform;
+    option.classList.toggle('selected',selected);
+    option.setAttribute('aria-checked',String(selected));
+  });
+  renderPlatformTrigger();
+  setPlatformMenu(false);
+}
 
 const labels:Record<TaskStatus,string>={
   saved:'同步成功',
@@ -57,7 +90,7 @@ async function checkLogin(){
   const pill=$('#login-state');
   const text=$('#login-text');
   loginStatus='checking';
-  pill.className='platform-pill checking';
+  pill.className='platform-option checking'+(selectedPlatform==='csdn'?' selected':'');
   pill.title='正在检测 CSDN 登录状态…';
   text.textContent='检测中…';
   try{
@@ -68,23 +101,36 @@ async function checkLogin(){
     if(current!==checkSequence)return;
     if(result?.loggedIn){
       loginStatus='logged-in';
-      pill.className='platform-pill logged';
+      csdnAccount=result.account||'';
+      pill.className='platform-option logged'+(selectedPlatform==='csdn'?' selected':'');
       pill.title='CSDN 已登录，点击可刷新状态';
-      text.textContent=result.account?`CSDN: ${result.account} ✓`:'CSDN 已登录 ✓';
+      text.textContent=result.account?`CSDN · ${result.account}`:'CSDN 已登录';
     }else if(result?.ok){
       loginStatus='logged-out';
-      pill.className='platform-pill login-link';
+      csdnAccount='';
+      pill.className='platform-option login-link'+(selectedPlatform==='csdn'?' selected':'');
       pill.title='CSDN 未登录，点击前往登录';
       text.textContent='CSDN 未登录 ↗';
     }else throw new Error(result?.message||'检测失败');
   }catch(error){
     if(current!==checkSequence)return;
     loginStatus='error';
-    pill.className='platform-pill error';
+    pill.className='platform-option error'+(selectedPlatform==='csdn'?' selected':'');
     pill.title='登录状态检测失败，点击重试';
     text.textContent='CSDN 检测失败 ↻';
     toast((error as Error).message);
-  }
+  }finally{renderPlatformTrigger();}
+}
+
+async function checkWechatLogin(){
+  const pill=$('#wechat-login-state');const text=$('#wechat-login-text');
+  wechatLoginStatus='checking';pill.className='platform-option checking'+(selectedPlatform==='wechat'?' selected':'');text.textContent='微信检测中…';renderPlatformTrigger();
+  try{
+    const result=await chrome.runtime.sendMessage({type:'CHECK_WECHAT_STATUS'});
+    if(result?.loggedIn){wechatLoginStatus='logged-in';wechatAccount=result.account||'';pill.className='platform-option logged'+(selectedPlatform==='wechat'?' selected':'');text.textContent=result.account?`微信公众号 · ${result.account}`:'微信公众号已登录';pill.title='微信公众号已登录，点击刷新状态';}
+    else if(result?.ok){wechatLoginStatus='logged-out';wechatAccount='';pill.className='platform-option login-link'+(selectedPlatform==='wechat'?' selected':'');text.textContent='微信公众号未登录 · 点击登录';pill.title='点击登录微信公众平台';}
+    else throw new Error(result?.message||'微信登录检测失败');
+  }catch(error){wechatLoginStatus='error';pill.className='platform-option error'+(selectedPlatform==='wechat'?' selected':'');text.textContent='微信公众号检测失败 · 点击重试';toast((error as Error).message);}finally{renderPlatformTrigger();}
 }
 
 function escapeHtml(value:string){
@@ -128,7 +174,7 @@ function taskCard(task:SyncTask){
   const cover=task.article.cover?`<img src="${escapeHtml(task.article.cover)}" alt="">`:'';
   const actions=[];
   if(task.draftUrl)actions.push(`<button class="history-action btn-action-primary" data-open="${escapeHtml(task.draftUrl)}">草稿 ↗</button>`);
-  if(!['queued','checking-login','transforming','writing'].includes(task.status))actions.push(`<button class="history-action btn-action-dryrun" data-dryrun="${escapeHtml(task.id)}" title="同步预演：查看分类命中、图片转存与内容风险，不写入 CSDN">预演</button>`);
+  if(task.platform==='csdn'&&!['queued','checking-login','transforming','writing'].includes(task.status))actions.push(`<button class="history-action btn-action-dryrun" data-dryrun="${escapeHtml(task.id)}" title="同步预演：查看分类命中、图片转存与内容风险，不写入 CSDN">预演</button>`);
   if(task.status==='needs-confirmation')actions.push(`<button class="history-action confirm btn-action-confirm" data-confirm="${escapeHtml(task.id)}">确认更新</button>`);
   if(['failed','needs-user'].includes(task.status))actions.push(`<button class="history-action retry btn-action-retry" data-retry="${escapeHtml(task.id)}">重试</button>`);
   if(!['queued','checking-login','transforming','writing'].includes(task.status))actions.push(`<button class="history-action delete btn-action-delete" data-delete="${escapeHtml(task.id)}" title="删除本地记录" aria-label="删除本地记录"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>`);
@@ -146,15 +192,17 @@ function taskCard(task:SyncTask){
     </div>
     <div class="task-progress ${task.progress.total?'':'indeterminate'}"><span style="width:${task.progress.total?progressPercent:35}%"></span></div>
   </div>`:'';
+  const platformName=task.platform==='wechat'?'微信公众号':'CSDN';
+  const bottomStats=stats?`<span>${platformName}</span><i>·</i>${stats}`:`<span>${platformName}草稿同步</span>`;
   return`<div class="history-card ${kind}">
     <div class="task-main-row">
       <span class="history-cover">${cover}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></span>
       <div class="task-info">
         <b class="task-title" title="${escapeHtml(task.article.title)}">${escapeHtml(task.article.title)}</b>
         <div class="task-meta">
+          <span class="platform-badge ${task.platform}">${platformName}</span>
           <span class="state-tag ${kind}">${stateIcon} ${stateText}</span>
-          <span>·</span>
-          <span>${formatDate(task.updatedAt)}</span>
+          <span class="task-date">${formatDate(task.updatedAt)}</span>
         </div>
       </div>
     </div>
@@ -163,7 +211,7 @@ function taskCard(task:SyncTask){
     ${diagnostic}
     ${warning}
     <div class="task-bottom-row">
-      <div class="task-stats">${stats||'<span>CSDN 草稿同步</span>'}</div>
+      <div class="task-stats">${bottomStats}</div>
       ${action}
     </div>
   </div>`;
@@ -195,7 +243,7 @@ async function loadTasks(){
     badge.textContent=all.length?String(all.length):'';
     const clearButton=$<HTMLButtonElement>('#history-clear');
     clearButton.disabled=!all.length;
-    $<HTMLButtonElement>('#history-retry-all').disabled=!all.some(task=>['failed','needs-user'].includes(task.status));
+    $<HTMLButtonElement>('#history-retry-all').disabled=!all.some(isRetryableTask);
     if(!tasks.length){
       list.innerHTML=`<div class="empty-state-view harbor-empty-view">
         <div class="harbor-beacon-stage">
@@ -258,9 +306,12 @@ async function loadTasks(){
       }
     }));
     list.querySelectorAll<HTMLButtonElement>('[data-retry]').forEach(button=>button.addEventListener('click',async()=>{
+      const task=all.find(item=>item.id===button.dataset.retry);
+      const confirmUncertain=task?.diagnostic?.category==='interrupted';
+      if(confirmUncertain&&!confirm('上次保存结果不确定。请先检查目标草稿箱；仅在确认需要重新写入后继续，重试可能产生重复草稿。是否继续？'))return;
       button.disabled=true;
       button.textContent='重试中…';
-      const retry=await chrome.runtime.sendMessage({type:'RETRY_TASK',id:button.dataset.retry});
+      const retry=await chrome.runtime.sendMessage({type:'RETRY_TASK',id:button.dataset.retry,confirmUncertain});
       if(!retry?.ok)toast(retry?.message||'重新同步失败');
       else toast('已重新发起同步');
       setTimeout(()=>void loadTasks(),600);
@@ -284,6 +335,7 @@ async function loadTasks(){
 
 function renderSettings(settings:ExtensionSettings){
   $<HTMLInputElement>('#auto-sync').checked=settings.autoSyncAfterPublish;
+  $<HTMLInputElement>('#wechat-auto-sync').checked=settings.wechatAutoSync;
   $<HTMLInputElement>('#sync-cover').checked=settings.syncCover;
   $<HTMLInputElement>('#auto-summary').checked=settings.autoSummary;
   $<HTMLInputElement>('#append-source-link').checked=settings.appendSourceLink;
@@ -296,6 +348,7 @@ function renderSettings(settings:ExtensionSettings){
 async function saveSettingsFromForm(){
   currentSettings=normalizeSettings({
     autoSyncAfterPublish:$<HTMLInputElement>('#auto-sync').checked,
+    wechatAutoSync:$<HTMLInputElement>('#wechat-auto-sync').checked,
     syncCover:$<HTMLInputElement>('#sync-cover').checked,
     autoSummary:$<HTMLInputElement>('#auto-summary').checked,
     appendSourceLink:$<HTMLInputElement>('#append-source-link').checked,
@@ -407,9 +460,22 @@ document.querySelectorAll<HTMLButtonElement>('.tab-button').forEach(button=>{
   });
 });
 
+$('#platform-trigger').addEventListener('click',event=>{
+  event.stopPropagation();
+  setPlatformMenu($('#platform-menu').hidden);
+});
 $('#login-state').addEventListener('click',()=>{
+  selectPlatform('csdn');
   if(loginStatus==='logged-out')void chrome.runtime.sendMessage({type:'OPEN_CSDN_LOGIN'});
-  else void checkLogin();
+  else if(loginStatus==='error')void checkLogin();
+});
+$('#wechat-login-state').addEventListener('click',()=>{
+  selectPlatform('wechat');
+  if(wechatLoginStatus==='logged-out')void chrome.runtime.sendMessage({type:'OPEN_WECHAT_LOGIN'});
+  else if(wechatLoginStatus==='error')void checkWechatLogin();
+});
+document.addEventListener('click',event=>{
+  if(!(event.target as Element).closest('.platform-switcher'))setPlatformMenu(false);
 });
 
 document.querySelectorAll<HTMLButtonElement>('[data-filter]').forEach(button=>button.addEventListener('click',()=>{
@@ -433,7 +499,7 @@ $<HTMLButtonElement>('#history-clear').addEventListener('click',async()=>{
   await loadTasks();
 });
 
-['#auto-sync','#sync-cover','#auto-summary','#append-source-link','#confirm-update','#image-failure'].forEach(selector=>$(selector).addEventListener('change',()=>void saveSettingsFromForm()));
+['#auto-sync','#wechat-auto-sync','#sync-cover','#auto-summary','#append-source-link','#confirm-update','#image-failure'].forEach(selector=>$(selector).addEventListener('change',()=>void saveSettingsFromForm()));
 ['#default-category','#category-mappings'].forEach(selector=>$(selector).addEventListener('change',()=>void saveSettingsFromForm()));
 
 $('#health-detail').addEventListener('click',()=>void chrome.tabs.create({url:STATUS_PAGE_URL,active:true}));
@@ -442,7 +508,10 @@ $('#dryrun-modal').addEventListener('click',event=>{
   if(event.target===$('#dryrun-modal'))closeDryRunModal();
 });
 document.addEventListener('keydown',event=>{
-  if(event.key==='Escape'&&!$('#dryrun-modal').hidden)closeDryRunModal();
+  if(event.key==='Escape'){
+    if(!$('#dryrun-modal').hidden)closeDryRunModal();
+    setPlatformMenu(false);
+  }
 });
 
 chrome.storage.onChanged.addListener((changes,area)=>{
@@ -463,5 +532,5 @@ void loadTasks();
 void loadSettings();
 void loadCsdnCategories();
 void checkLogin();
+void checkWechatLogin();
 void checkHealthBanner();
-

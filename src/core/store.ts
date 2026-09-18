@@ -1,10 +1,11 @@
-import type {CsdnDraftMapping,ExtensionSettings,SyncTask} from '../types';
+import type {CsdnDraftMapping,ExtensionSettings,PlatformId,SyncTask,WechatDraftMapping} from '../types';
 import {defaultSettings,normalizeSettings} from './settings';
 import {articleIdentityKeys} from './task';
 import {Semaphore} from './async';
 const KEY='syncTasks';
 const SETTINGS_KEY='settings';
-const MAPPING_PREFIX='csdnDraftMapping:';
+const CSDN_MAPPING_PREFIX='csdnDraftMapping:';
+const WECHAT_MAPPING_PREFIX='wechatDraftMapping:';
 /** 读-改-写互斥锁：序列化对 syncTasks 键的存取，防止 Semaphore(2) 并发下交错覆盖。 */
 const storageMutex=new Semaphore(1);
 
@@ -27,7 +28,7 @@ export function uniqueTasks(tasks:SyncTask[]){
   return[...tasks]
     .sort((a,b)=>Date.parse(b.updatedAt)-Date.parse(a.updatedAt))
     .filter(task=>{
-      const identity=`${task.platform}:${task.article.id}`;
+      const identity=`${task.platform}:${task.platform==='wechat'?task.wechatAccountId||'legacy':''}:${task.article.id}`;
       if(identities.has(identity))return false;
       identities.add(identity);
       return true;
@@ -36,27 +37,38 @@ export function uniqueTasks(tasks:SyncTask[]){
 
 export async function allTasks(){return uniqueTasks(((await chrome.storage.local.get(KEY))[KEY]||[]) as SyncTask[]);}
 export async function saveTasks(tasks:SyncTask[]){await chrome.storage.local.set({[KEY]:tasks.slice(0,200).map(toStorageTask)});}
-export async function saveDraftMapping(articleId:string,csdnArticleId:string,draftUrl?:string){
-  await chrome.storage.local.set({[MAPPING_PREFIX+articleId]:{articleId,csdnArticleId,draftUrl,updatedAt:new Date().toISOString()}});
+export async function saveDraftMapping(articleId:string,targetId:string,draftUrl?:string,platform:PlatformId='csdn',wechatAccountId?:string){
+  const prefix=platform==='wechat'?WECHAT_MAPPING_PREFIX+(wechatAccountId?`${wechatAccountId}:`:''):CSDN_MAPPING_PREFIX;
+  const data=platform==='wechat'
+    ?{articleId,wechatAccountId,wechatAppMsgId:targetId,draftUrl,updatedAt:new Date().toISOString()}
+    :{articleId,csdnArticleId:targetId,draftUrl,updatedAt:new Date().toISOString()};
+  await chrome.storage.local.set({[prefix+articleId]:data});
 }
-export async function getDraftMapping(articleId:string){return(await chrome.storage.local.get(MAPPING_PREFIX+articleId))[MAPPING_PREFIX+articleId] as CsdnDraftMapping|undefined;}
-export async function saveArticleDraftMapping(article:SyncTask['article'],csdnArticleId:string,draftUrl?:string){
-  for(const identity of articleIdentityKeys(article))await saveDraftMapping(identity,csdnArticleId,draftUrl);
+export async function getDraftMapping(articleId:string,platform:PlatformId='csdn',wechatAccountId?:string){
+  const prefix=platform==='wechat'?WECHAT_MAPPING_PREFIX+(wechatAccountId?`${wechatAccountId}:`:''):CSDN_MAPPING_PREFIX;
+  return(await chrome.storage.local.get(prefix+articleId))[prefix+articleId] as (CsdnDraftMapping&WechatDraftMapping)|undefined;
 }
-export async function getArticleDraftMapping(article:SyncTask['article']){
+export async function saveArticleDraftMapping(article:SyncTask['article'],targetId:string,draftUrl?:string,platform:PlatformId='csdn',wechatAccountId?:string){
+  for(const identity of articleIdentityKeys(article))await saveDraftMapping(identity,targetId,draftUrl,platform,wechatAccountId);
+}
+export async function getArticleDraftMapping(article:SyncTask['article'],platform:PlatformId='csdn',wechatAccountId?:string){
   for(const identity of articleIdentityKeys(article)){
-    const mapping=await getDraftMapping(identity);
+    const mapping=await getDraftMapping(identity,platform,wechatAccountId);
     if(mapping)return mapping;
   }
   return undefined;
 }
 export async function preserveTaskMappings(tasks:SyncTask[]){
-  for(const task of tasks)if(task.csdnArticleId)await saveArticleDraftMapping(task.article,task.csdnArticleId,task.draftUrl);
+  for(const task of tasks){
+    if(task.platform==='csdn'&&task.csdnArticleId)await saveArticleDraftMapping(task.article,task.csdnArticleId,task.draftUrl,'csdn');
+    else if(task.platform==='wechat'&&task.wechatAppMsgId)await saveArticleDraftMapping(task.article,task.wechatAppMsgId,task.draftUrl,'wechat',task.wechatAccountId);
+  }
 }
 export async function deleteTask(id:string){await storageMutex.run(async()=>{
   const tasks=await allTasks();
   const task=tasks.find(item=>item.id===id);
-  if(task?.csdnArticleId)await saveArticleDraftMapping(task.article,task.csdnArticleId,task.draftUrl);
+  if(task?.platform==='csdn'&&task.csdnArticleId)await saveArticleDraftMapping(task.article,task.csdnArticleId,task.draftUrl,'csdn');
+  else if(task?.platform==='wechat'&&task.wechatAppMsgId)await saveArticleDraftMapping(task.article,task.wechatAppMsgId,task.draftUrl,'wechat',task.wechatAccountId);
   await saveTasks(tasks.filter(item=>item.id!==id));
 });}
 export async function putTask(task:SyncTask){await storageMutex.run(async()=>{const tasks=await allTasks();const i=tasks.findIndex(x=>x.id===task.id);if(i>=0)tasks[i]=task;else tasks.unshift(task);await saveTasks(tasks);});}

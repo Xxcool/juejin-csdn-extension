@@ -1,7 +1,7 @@
 // 核心同步逻辑回归测试：覆盖任务去重、异步重试、并发上限和 CSDN 请求契约。
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {Semaphore,mapConcurrent,retry} from '../src/core/async';
-import {deleteTask,getDraftMapping,migrateStoredTasks,saveArticleDraftMapping,toStorageTask,uniqueTasks} from '../src/core/store';
+import {deleteTask,getArticleDraftMapping,getDraftMapping,migrateStoredTasks,saveArticleDraftMapping,toStorageTask,uniqueTasks} from '../src/core/store';
 import {articleIdentityKeys,canDeleteTask,extractCsdnArticleId,findMatchingTask,isActiveTask,isInterruptedTask,isRetryableTask,isUncertainCreateTask} from '../src/core/task';
 import {SyncError,classifySyncError} from '../src/core/diagnostic';
 import {isSupportedMessage} from '../src/core/message';
@@ -10,6 +10,8 @@ import {buildTaskNotification} from '../src/core/notify';
 import {fetchHealthStatus,isHealthAlert,parseHealthPayload,refreshHealthIfNeeded} from '../src/core/health';
 import {fetchJuejinDraftByArticleId,fetchJuejinDraftByDraftId} from '../src/source/juejin-api';
 import {applyImageTransfers,buildDryRunReport,buildSaveArticleBody,buildSourceAttribution,checkCsdnAuth,collectExternalImages,enforceImageFailurePolicy,extractSummary,fetchCsdnArticleState,fetchCsdnCategories,imageExtension,normalizeMarkdown,sanitizeJuejinContainers,saveDraftViaApi,stripJuejinImageParams,summarizeImageTransfers,validateCsdnArticle} from '../src/targets/csdn-api';
+import {collectWechatImageUrls,compileWechatHtml,replaceWechatImageUrls} from '../src/targets/wechat-content';
+import {buildWechatDraftForm,calculateCoverCrop,parseWechatMeta,saveWechatDraft} from '../src/targets/wechat-api';
 import type {Article,SyncTask} from '../src/types';
 import rules from '../rules.json';
 
@@ -88,6 +90,16 @@ describe('任务历史',()=>{
     await expect(getDraftMapping('article-123')).resolves.toMatchObject({csdnArticleId:'456'});
     await expect(getDraftMapping('draft-9')).resolves.toMatchObject({csdnArticleId:'456'});
   });
+
+  it('删除历史记录时独立保留微信公众号草稿映射',async()=>{
+    const wechatTask:SyncTask={id:'wechat-saved',article,platform:'wechat',status:'saved',createdAt:'2026-09-01T00:00:00Z',updatedAt:'2026-09-01T00:00:00Z',attempts:1,wechatAppMsgId:'wx-999',draftUrl:'https://mp.weixin.qq.com/draft/wx-999'};
+    const storage:Record<string,unknown>={syncTasks:[wechatTask]};
+    vi.stubGlobal('chrome',{storage:{local:{get:vi.fn(async(key:string)=>({[key]:storage[key]})),set:vi.fn(async(value:Record<string,unknown>)=>Object.assign(storage,value))}}});
+    await deleteTask(wechatTask.id);
+    expect(storage.syncTasks).toEqual([]);
+    await expect(getDraftMapping(article.id,'wechat')).resolves.toMatchObject({wechatAppMsgId:'wx-999',draftUrl:wechatTask.draftUrl});
+    await expect(getArticleDraftMapping(article,'wechat')).resolves.toMatchObject({wechatAppMsgId:'wx-999'});
+  });
 });
 
 describe('同步设置',()=>{
@@ -134,7 +146,7 @@ describe('后台消息与失败诊断',()=>{
 
   it('结构化错误优先：5xx 凭证失败不再被误判为内容异常',()=>{
     expect(classifySyncError(new SyncError('获取 CSDN 图片上传凭证失败 (500)','network','images'),'content')).toMatchObject({category:'network',stage:'images'});
-    expect(classifySyncError(new SyncError('该 CSDN 文章已公开发布，已阻断同步','blocked','draft'),'draft')).toMatchObject({category:'blocked',suggestion:expect.stringContaining('已公开发布')});
+    expect(classifySyncError(new SyncError('该 CSDN 文章已公开发布，已阻断同步','blocked','draft'),'draft')).toMatchObject({category:'blocked',suggestion:expect.stringContaining('核对目标账号')});
   });
 });
 
@@ -436,5 +448,97 @@ describe('v0.6.0 体验深化',()=>{
     expect(JSON.parse(bodies[0])).toMatchObject({id:'deleted-1',is_new:0});
     expect(JSON.parse(bodies[1])).toMatchObject({is_new:1});
     expect(JSON.parse(bodies[1]).id).toBeUndefined();
+  });
+});
+
+describe('v1.0.0 微信公众号完整同步',()=>{
+  it('从公众平台首页提取账号、令牌和图片上传票据',()=>{
+    const html='window.wx.commonData={data:{t:"123456",ticket:"ticket-x",user_name:"gh_test",nick_name:"测试公众号",time:"1789000000"}}';
+    expect(parseWechatMeta(html)).toEqual({token:'123456',ticket:'ticket-x',userName:'gh_test',nickName:'测试公众号',svrTime:1789000000});
+    expect(parseWechatMeta('<html>login</html>')).toBeUndefined();
+  });
+
+  it('按微信约束重新生成内联样式 HTML 并移除外链跳转',()=>{
+    const html=compileWechatHtml('## 小标题\n\n正文 **加粗** 与 [外链](https://example.com)。\n\n![图](https://img.example.com/a.png)\n\n```ts\nconst x = 1 < 2\n```');
+    expect(html).toContain('border-left:4px solid');
+    expect(html).toContain('<strong style=');
+    expect(html).not.toContain('href="https://example.com"');
+    expect(html).toContain('src="https://img.example.com/a.png"');
+    expect(html).toContain('&lt;');
+    expect(html).not.toContain('<script');
+  });
+
+  it('将正文图片地址替换为微信 CDN 地址',()=>{
+    const html=compileWechatHtml('![图](https://img.example.com/a.png?x=1&y=2)');
+    const replaced=replaceWechatImageUrls(html,new Map([['https://img.example.com/a.png?x=1&y=2','https://mmbiz.qpic.cn/new.png']]));
+    expect(replaced).toContain('https://mmbiz.qpic.cn/new.png');
+    expect(replaced).not.toContain('img.example.com');
+  });
+
+  it('识别 Markdown 与 HTML 图片且不漏掉 CSDN 图床来源',()=>{
+    const html=compileWechatHtml('![](https://img-blog.csdnimg.cn/a.png)\n\n<img src="https://example.com/b.webp">');
+    expect(collectWechatImageUrls(html)).toEqual(['https://img-blog.csdnimg.cn/a.png','https://example.com/b.webp']);
+  });
+
+  it('居中计算三种封面裁剪比例并写入草稿契约',()=>{
+    expect(calculateCoverCrop('1_1',1200,800)).toMatchObject({x1:1/6,y1:0,x2:5/6,y2:1,x1Abs:200,x2Abs:1000});
+    const meta={token:'123',ticket:'t',userName:'gh_x',nickName:'公众号',svrTime:1};
+    const config=calculateCoverCrop('16_9',1600,900);
+    const form=buildWechatDraftForm({...article,title:'微信公众号测试文章',summary:'摘要'},'<p>正文</p>',meta,[{cdnurl:'https://mmbiz.qpic.cn/cover.jpg',file_id:99,width:1600,height:900,config}]);
+    expect(form.get('cdn_url0')).toBe('https://mmbiz.qpic.cn/cover.jpg');
+    expect(form.get('cdn_16_9_url0')).toBe('https://mmbiz.qpic.cn/cover.jpg');
+    expect(form.get('content0')).toBe('<p>正文</p>');
+    expect(JSON.parse(form.get('crop_list0')!)).toMatchObject({crop_list:[{ratio:'16_9',file_id:99}]});
+  });
+
+  it('正确编译无序列表、有序列表与嵌套列表且不触发 list_item 异常',()=>{
+    const md=`
+- 无序列表项 1
+- 无序列表项 2
+  - 子列表项 A
+  - 子列表项 B
+1. 有序列表项 1
+2. 有序列表项 2
+`;
+    const html=compileWechatHtml(md);
+    expect(html).toContain('<ul style=');
+    expect(html).toContain('<ol style=');
+    expect(html).toContain('<li style=');
+    expect(html).toContain('无序列表项 1');
+    expect(html).toContain('子列表项 A');
+    expect(html).toContain('有序列表项 1');
+  });
+
+  it('更新微信草稿时表单携带 AppMsgId 参数',()=>{
+    const meta={token:'123',ticket:'t',userName:'gh_x',nickName:'公众号',svrTime:1};
+    const config=calculateCoverCrop('16_9',1600,900);
+    const form=buildWechatDraftForm(article,'<p>正文</p>',meta,[{cdnurl:'https://mmbiz.qpic.cn/cover.jpg',file_id:99,width:1600,height:900,config}],'appmsg-123456');
+    expect(form.get('AppMsgId')).toBe('appmsg-123456');
+  });
+
+  it('微信更新遇到 500 暂停核对，不再隐式新建草稿',async()=>{
+    const testArticle={...article,markdown:'这是一篇用来测试微信公众号草稿自动降级新建的长文章内容。',cover:'https://example.com/cover.jpg'};
+    let callCount=0;
+    const fetchMock=vi.fn(async(url:string|URL)=>{
+      const href=String(url);
+      if(href==='https://mp.weixin.qq.com/'||href==='https://mp.weixin.qq.com')return{ok:true,status:200,text:async()=>'window.wx.commonData={data:{t:"123456",ticket:"ticket-x",user_name:"gh_test",nick_name:"测试公众号",time:"1789000000"}};'};
+      if(href.includes('/cgi-bin/cropimage'))return{ok:true,status:200,json:async()=>({base_resp:{err_msg:'ok'},result:[{cdnurl:'https://mmbiz.qpic.cn/c1',file_id:1,width:1600,height:900},{cdnurl:'https://mmbiz.qpic.cn/c2',file_id:2,width:900,height:900},{cdnurl:'https://mmbiz.qpic.cn/c3',file_id:3,width:900,height:1200}]})};
+      if(href.includes('/cgi-bin/filetransfer'))return{ok:true,status:200,json:async()=>({base_resp:{err_msg:'ok'},cdn_url:'https://mmbiz.qpic.cn/img1'})};
+      if(href.includes('example.com/cover.jpg'))return{ok:true,status:200,blob:async()=>new Blob(['dummy-bytes'],{type:'image/jpeg'})};
+      if(href.includes('/cgi-bin/operate_appmsg')){
+        callCount++;
+        if(href.includes('sub=edit')){
+          return{ok:false,status:500,json:async()=>({base_resp:{ret:-1,err_msg:'appmsg not exist'}})};
+        }
+        if(href.includes('sub=create')){
+          return{ok:true,json:async()=>({appMsgId:88888,base_resp:{ret:0,err_msg:'ok'}})};
+        }
+      }
+      return{ok:true,text:async()=>''};
+    });
+    vi.stubGlobal('fetch',fetchMock);
+    vi.stubGlobal('createImageBitmap',vi.fn(async()=>({width:1600,height:900,close:()=>{}})));
+    await expect(saveWechatDraft(testArticle,{appMsgId:'old-deleted-draft-id',accountId:'gh_test'})).rejects.toMatchObject({category:'interrupted'});
+    expect(callCount).toBe(1);
   });
 });

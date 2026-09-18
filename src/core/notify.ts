@@ -14,7 +14,8 @@ export function buildTaskNotification(task:SyncTask,durationMs:number):TaskNotif
   const title=task.article.title;
   if(task.status==='saved'){
     const imageStats=task.stats?.imageTotal?`，转存图片 ${task.stats.imageSucceeded}/${task.stats.imageTotal}`:'';
-    return{id:task.id,kind:'saved',title:'文章已抵达 CSDN 草稿箱',message:`「${title}」保存成功${imageStats}`,draftUrl:task.draftUrl};
+    const destination=task.platform==='wechat'?'微信公众号草稿箱':'CSDN 草稿箱';
+    return{id:task.id,kind:'saved',title:`文章已抵达 ${destination}`,message:`「${title}」保存成功${imageStats}`,draftUrl:task.draftUrl};
   }
   if(task.status==='failed'||task.status==='needs-user'){
     return{id:task.id,kind:'failed',title:'文章摆渡同步需要处理',message:`「${title}」${task.diagnostic?.message||task.error||'同步失败，点击查看详情'}`};

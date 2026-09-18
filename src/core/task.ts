@@ -5,9 +5,9 @@ export function articleIdentityKeys(article:SyncTask['article']){
   return[...new Set([article.id,article.sourceDraftId].filter((value):value is string=>!!value))];
 }
 
-export function findMatchingTask(tasks:SyncTask[],article:SyncTask['article']){
+export function findMatchingTask(tasks:SyncTask[],article:SyncTask['article'],platform:SyncTask['platform']='csdn',wechatAccountId?:string){
   const identities=new Set(articleIdentityKeys(article));
-  return tasks.find(task=>articleIdentityKeys(task.article).some(identity=>identities.has(identity))&&task.platform==='csdn');
+  return tasks.find(task=>articleIdentityKeys(task.article).some(identity=>identities.has(identity))&&task.platform===platform&&(platform!=='wechat'||task.wechatAccountId===wechatAccountId));
 }
 
 export function extractCsdnArticleId(draftUrl?:string){
@@ -16,14 +16,14 @@ export function extractCsdnArticleId(draftUrl?:string){
 }
 
 export function isInterruptedTask(task:SyncTask){
-  return['queued','checking-login','transforming'].includes(task.status)||(task.status==='writing'&&!!task.csdnArticleId);
+  return['queued','checking-login','transforming'].includes(task.status)||(task.status==='writing'&&!!(task.csdnArticleId||task.wechatAppMsgId));
 }
 
 /** 新建草稿写入中断后无法判断服务端是否成功，自动重试可能产生重复草稿。 */
 export function isUncertainCreateTask(task:SyncTask){
-  return task.status==='writing'&&!task.csdnArticleId;
+  return task.status==='writing'&&!task.csdnArticleId&&!task.wechatAppMsgId;
 }
 
 export function isActiveTask(task:SyncTask){return['queued','checking-login','transforming','writing'].includes(task.status);}
-export function isRetryableTask(task:SyncTask){return['failed','needs-user'].includes(task.status);}
+export function isRetryableTask(task:SyncTask){return['failed','needs-user'].includes(task.status)&&task.diagnostic?.category!=='interrupted';}
 export function canDeleteTask(task:SyncTask){return!isActiveTask(task);}

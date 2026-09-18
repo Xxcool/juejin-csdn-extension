@@ -1,4 +1,26 @@
-/* 编辑器工具栏入口：拟态掘金官方 Semi 风格设计规范并支持深色主题 */
+/* 编辑器工具栏统一入口：平台选择统一放入弹窗，避免每接一个平台就增加一个按钮。 */
+.jc-editor-sync-control {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  margin: 0 10px;
+  padding: 0 12px;
+  border: 1px solid #e5e6eb;
+  border-radius: 6px;
+  background: #fff;
+  color: #1d2129;
+  font: 500 13px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color .18s ease, border-color .18s ease, background-color .18s ease;
+}
+.jc-editor-sync-control svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.jc-editor-sync-control:hover { color: #1e80ff; border-color: #1e80ff; background: #f7f8fa; }
+.jc-editor-sync-control:focus-visible { outline: 2px solid rgba(30,128,255,.35); outline-offset: 2px; }
+
+/* 兼容旧版注入节点，重载扩展后由新入口替换。 */
 .jc-sync-option {
   height: 36px;
   box-sizing: border-box;
@@ -189,6 +211,731 @@ body[data-theme="dark"] .jc-sync-option:hover {
   border-color: #1e80ff;
 }
 
+body[data-theme="dark"] .jc-editor-sync-control { color:#f2f3f5; background:#232328; border-color:#383842; }
+body[data-theme="dark"] .jc-editor-sync-control:hover { color:#60a5fa; border-color:#1e80ff; background:#2b2b33; }
+
+/* ==========================================================================
+   多平台选择弹窗（UI 精细化重构版）
+   ========================================================================== */
+.jc-sync-dialog-root {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", PingFang SC, "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.jc-sync-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: jc-fade-in 0.2s ease-out;
+}
+
+@keyframes jc-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.jc-sync-dialog {
+  position: relative;
+  width: min(500px, calc(100vw - 32px));
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid rgba(229, 230, 235, 0.85);
+  border-radius: 20px;
+  box-shadow: 0 24px 70px -12px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  animation: jc-dialog-enter 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  z-index: 1;
+}
+
+@keyframes jc-dialog-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.jc-sync-dialog:focus {
+  outline: none;
+}
+
+/* 弹窗 Header */
+.jc-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #f2f3f5;
+  background: #ffffff;
+}
+
+.jc-dialog-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.jc-dialog-emblem {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #1e80ff 0%, #1159e6 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(30, 128, 255, 0.28);
+  flex-shrink: 0;
+}
+
+.jc-dialog-emblem svg {
+  width: 18px;
+  height: 18px;
+}
+
+.jc-dialog-titles h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #1d2129;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.jc-dialog-titles p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: #86909c;
+  line-height: 1.4;
+}
+
+.jc-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.jc-btn-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: #f7f8fa;
+  color: #4e5969;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  padding: 0;
+}
+
+.jc-btn-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.jc-btn-icon:hover {
+  background: #f2f3f5;
+  color: #1d2129;
+  border-color: #e5e6eb;
+}
+
+.jc-btn-icon.is-spinning .jc-refresh-icon {
+  animation: jc-spin 0.75s linear infinite;
+}
+
+@keyframes jc-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* 弹窗 Body */
+.jc-dialog-body {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+.jc-platform-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 平台卡片 */
+.jc-platform-card {
+  display: grid;
+  grid-template-columns: 46px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 16px;
+  border: 1px solid #e5e6eb;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #1d2129;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.jc-platform-card:hover {
+  border-color: #c9cdd4;
+  background: #fafbfc;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transform: translateY(-1px);
+}
+
+.jc-platform-card:focus-visible {
+  outline: 2px solid #1e80ff;
+  outline-offset: 2px;
+}
+
+.jc-platform-card.is-selected {
+  border-color: #b3d1ff;
+  background: #f8fbff;
+  box-shadow: 0 2px 8px rgba(30, 128, 255, 0.06);
+}
+
+.jc-platform-card.is-selected:hover {
+  border-color: #8cb8ff;
+  background: #f2f7ff;
+  box-shadow: 0 4px 12px rgba(30, 128, 255, 0.09);
+}
+
+.jc-platform-card.is-unlogged {
+  background: #fafbfc;
+  border-color: #e5e6eb;
+}
+
+.jc-platform-card.is-unlogged:hover {
+  border-color: #d0d3d9;
+  background: #f7f8fa;
+}
+
+/* Logo 容器 */
+.jc-card-logo {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.jc-logo-img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  display: block;
+}
+
+/* 中间文案 */
+.jc-card-content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.jc-card-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.jc-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1d2129;
+  line-height: 1.3;
+}
+
+.jc-card-badge {
+  font-size: 10.5px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #f2f3f5;
+  color: #4e5969;
+}
+
+.jc-card-meta-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.jc-card-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.jc-card-status span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jc-card-status.is-checking {
+  color: #86909c;
+}
+
+.jc-card-status.is-logged {
+  color: #4e5969;
+}
+
+.jc-card-status.is-unlogged {
+  color: #ff7d00;
+}
+
+.jc-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.jc-card-status.is-logged .jc-status-dot {
+  background: #00b42a;
+  box-shadow: 0 0 0 3px rgba(0, 180, 42, 0.15);
+}
+
+.jc-card-status.is-unlogged .jc-status-dot {
+  background: #ff7d00;
+  box-shadow: 0 0 0 3px rgba(255, 125, 0, 0.15);
+}
+
+.jc-status-spinner {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid #dbeafe;
+  border-top-color: #1e80ff;
+  border-radius: 50%;
+  animation: jc-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+/* 右侧交互控件 */
+.jc-card-control {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.jc-action-skeleton {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: #f2f3f5;
+  animation: jc-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes jc-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* 定制 Checkbox */
+.jc-custom-checkbox {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  border: 1.5px solid #c9cdd4;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.jc-custom-checkbox svg {
+  width: 13px;
+  height: 13px;
+  transform: scale(0);
+  transition: transform 0.16s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+.jc-custom-checkbox.is-checked {
+  background: #1e80ff;
+  border-color: #1e80ff;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(30, 128, 255, 0.35);
+}
+
+.jc-custom-checkbox.is-checked svg {
+  transform: scale(1);
+}
+
+/* 去登录 胶囊按钮 */
+.jc-login-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 99px;
+  border: 1px solid rgba(30, 128, 255, 0.22);
+  background: #f0f7ff;
+  color: #1e80ff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.16s ease;
+  line-height: 1.4;
+}
+
+.jc-login-action-btn svg {
+  width: 10px;
+  height: 10px;
+  transition: transform 0.15s ease;
+}
+
+.jc-login-action-btn:hover {
+  background: #1e80ff;
+  color: #ffffff;
+  border-color: #1e80ff;
+  box-shadow: 0 2px 8px rgba(30, 128, 255, 0.3);
+}
+
+.jc-login-action-btn:hover svg {
+  transform: translate(1px, -1px);
+}
+
+/* 安全提示卡片 */
+.jc-sync-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e5e8ef;
+}
+
+.jc-note-icon {
+  width: 18px;
+  height: 18px;
+  color: #1e80ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.jc-note-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.jc-note-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.jc-note-content b {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1d2129;
+  line-height: 1.4;
+}
+
+.jc-note-content span {
+  font-size: 11.5px;
+  color: #86909c;
+  line-height: 1.45;
+}
+
+/* 弹窗 Footer */
+.jc-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  border-top: 1px solid #f2f3f5;
+  background: #fafbfc;
+}
+
+.jc-footer-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.jc-footer-status .jc-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c9cdd4;
+  transition: all 0.2s ease;
+}
+
+.jc-footer-status[data-has-selected="true"] .jc-status-dot {
+  background: #1e80ff;
+  box-shadow: 0 0 0 3px rgba(30, 128, 255, 0.2);
+}
+
+.jc-selected-count {
+  font-size: 12.5px;
+  color: #4e5969;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jc-footer-buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.jc-dialog-cancel,
+.jc-dialog-confirm {
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 9px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  user-select: none;
+}
+
+.jc-dialog-cancel {
+  border: 1px solid #d9dce3;
+  background: #ffffff;
+  color: #4e5969;
+}
+
+.jc-dialog-cancel:hover {
+  background: #f2f3f5;
+  color: #1d2129;
+  border-color: #c9cdd4;
+}
+
+.jc-dialog-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: none;
+  background: linear-gradient(135deg, #1e80ff 0%, #1168f0 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(30, 128, 255, 0.3);
+}
+
+.jc-confirm-icon-wrap svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  display: block;
+}
+
+.jc-dialog-confirm:hover:not(:disabled) {
+  background: linear-gradient(135deg, #388eff 0%, #1e80ff 100%);
+  box-shadow: 0 4px 14px rgba(30, 128, 255, 0.4);
+  transform: translateY(-0.5px);
+}
+
+.jc-dialog-confirm:disabled {
+  background: #e5e6eb;
+  color: #86909c;
+  box-shadow: none;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.jc-dialog-confirm.is-loading .jc-confirm-icon-wrap {
+  animation: jc-spin 0.8s linear infinite;
+}
+
+/* ==========================================================================
+   深色模式适配（暗黑主题）
+   ========================================================================== */
+body[data-theme="dark"] .jc-sync-backdrop {
+  background: rgba(0, 0, 0, 0.65);
+}
+
+body[data-theme="dark"] .jc-sync-dialog {
+  background: #1e1f24;
+  border-color: #2e3038;
+  color: #f2f3f5;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+}
+
+body[data-theme="dark"] .jc-dialog-header {
+  background: #1e1f24;
+  border-color: #2e3038;
+}
+
+body[data-theme="dark"] .jc-dialog-titles h2 {
+  color: #f2f3f5;
+}
+
+body[data-theme="dark"] .jc-btn-icon {
+  background: #25272e;
+  color: #c9cdd4;
+}
+
+body[data-theme="dark"] .jc-btn-icon:hover {
+  background: #2f323b;
+  color: #ffffff;
+  border-color: #383a45;
+}
+
+body[data-theme="dark"] .jc-platform-card {
+  background: #23252c;
+  border-color: #333640;
+  color: #f2f3f5;
+}
+
+body[data-theme="dark"] .jc-platform-card:hover {
+  background: #282a32;
+  border-color: #484c59;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+body[data-theme="dark"] .jc-platform-card.is-selected {
+  background: rgba(30, 128, 255, 0.08);
+  border-color: rgba(59, 130, 246, 0.45);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+body[data-theme="dark"] .jc-platform-card.is-selected:hover {
+  background: rgba(30, 128, 255, 0.12);
+  border-color: rgba(59, 130, 246, 0.65);
+}
+
+body[data-theme="dark"] .jc-platform-card.is-unlogged {
+  background: #1b1c21;
+}
+
+body[data-theme="dark"] .jc-card-logo {
+  background: #282a33;
+  border-color: #383a45;
+}
+
+body[data-theme="dark"] .jc-card-title {
+  color: #f2f3f5;
+}
+
+body[data-theme="dark"] .jc-card-badge {
+  background: #333640;
+  color: #c9cdd4;
+}
+
+body[data-theme="dark"] .jc-card-status.is-logged {
+  color: #c9cdd4;
+}
+
+body[data-theme="dark"] .jc-custom-checkbox {
+  background: #1d1e23;
+  border-color: #484b57;
+}
+
+body[data-theme="dark"] .jc-custom-checkbox.is-checked {
+  background: #1e80ff;
+  border-color: #1e80ff;
+}
+
+body[data-theme="dark"] .jc-login-action-btn {
+  background: rgba(30, 128, 255, 0.15);
+  border-color: rgba(30, 128, 255, 0.35);
+  color: #60a5fa;
+}
+
+body[data-theme="dark"] .jc-login-action-btn:hover {
+  background: #1e80ff;
+  color: #ffffff;
+}
+
+body[data-theme="dark"] .jc-sync-note {
+  background: #23252d;
+  border-color: #2e3038;
+}
+
+body[data-theme="dark"] .jc-note-content b {
+  color: #f2f3f5;
+}
+
+body[data-theme="dark"] .jc-dialog-footer {
+  background: #18191d;
+  border-color: #2e3038;
+}
+
+body[data-theme="dark"] .jc-selected-count {
+  color: #c9cdd4;
+}
+
+body[data-theme="dark"] .jc-dialog-cancel {
+  background: #25272e;
+  border-color: #383a45;
+  color: #c9cdd4;
+}
+
+body[data-theme="dark"] .jc-dialog-cancel:hover {
+  background: #2f323b;
+  color: #ffffff;
+}
+
+body[data-theme="dark"] .jc-dialog-confirm:disabled {
+  background: #2e3038;
+  color: #646a73;
+}
+
+@media (max-width: 560px) {
+  .jc-dialog-header,
+  .jc-dialog-body,
+  .jc-dialog-footer {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jc-sync-dialog,
+  .jc-sync-backdrop,
+  .jc-custom-checkbox,
+  .jc-platform-card {
+    animation: none;
+    transition: none;
+  }
+}
+
 body[data-theme="dark"] .jc-check {
   background: #1d1d22;
   border-color: #484854;
@@ -235,5 +982,4 @@ body[data-theme="dark"] .jc-creator-sync[data-state="login"] {
     display: none;
   }
 }
-
 

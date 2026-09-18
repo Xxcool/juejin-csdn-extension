@@ -1,141 +1,163 @@
 <div align="center">
   <img src="assets/logo-128.png" width="96" height="96" alt="文章摆渡 Logo">
-  <h1>⛵ 文章摆渡 (Article Ferry)</h1>
-  <p><b>面向技术创作者的端侧安全内容摆渡中枢 · 一处专注写作，优雅摆渡全网阵地</b></p>
+  <h1>文章摆渡 · Article Ferry</h1>
+  <p><b>在掘金写作，一次选择，同步至 CSDN 与微信公众号草稿箱。</b></p>
   <p>
-    <a href="https://artferry.vercel.app">在线文档</a> &nbsp;|&nbsp;
-    <a href="https://github.com/Xxcool/juejin-csdn-extension/releases">下载离线安装包</a>
+    <a href="https://github.com/Xxcool/juejin-csdn-extension/releases/latest">下载安装包</a> ·
+    <a href="https://artferry.vercel.app">项目网站</a> ·
+    <a href="CHANGELOG.md">更新日志</a>
   </p>
-
-  [![Website](https://img.shields.io/badge/Website-artferry.vercel.app-1D7DFA?logo=vercel)](https://artferry.vercel.app)
-  [![Release](https://img.shields.io/github/v/release/Xxcool/juejin-csdn-extension?color=blue&label=Release)](https://github.com/Xxcool/juejin-csdn-extension/releases)
-  [![Manifest V3](https://img.shields.io/badge/Chrome%20Extension-Manifest%20V3-success)](https://developer.chrome.com/docs/extensions/mv3/intro/)
-  [![Tests](https://img.shields.io/badge/Tests-41%2F41%20Passed-brightgreen)](https://github.com/Xxcool/juejin-csdn-extension/actions)
-  [![Privacy](https://img.shields.io/badge/Privacy-Local--First%20%7C%20Zero--Cookie-blueviolet)](PRIVACY.md)
-  [![License](https://img.shields.io/github/license/Xxcool/juejin-csdn-extension)](LICENSE)
 </div>
 
----
+[![Release](https://img.shields.io/github/v/release/Xxcool/juejin-csdn-extension)](https://github.com/Xxcool/juejin-csdn-extension/releases)
+[![CI](https://github.com/Xxcool/juejin-csdn-extension/actions/workflows/ci.yml/badge.svg)](https://github.com/Xxcool/juejin-csdn-extension/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/Xxcool/juejin-csdn-extension)](LICENSE)
 
-## 📖 项目简介 (About Article Ferry)
+文章摆渡是一款 Chrome Manifest V3 扩展。它读取你主动选择的掘金文章或编辑器草稿，处理正文与图片，再保存到目标平台草稿箱。内容转换在浏览器扩展中完成，直接请求源站和目标平台，不需要托管账号密码的中转服务。
 
-**「文章摆渡」(Article Ferry)** 是一款面向现代技术博主打造的端侧安全、去中心化内容多端同步利器。
+**只同步草稿，不自动公开发布。** 同步完成后，请在目标平台检查排版、封面和内容，再自行发布。
 
-在多平台内容分发的时代，创作者往往陷入反复复制粘贴、重调排版格式、忍受图床压缩水印、甚至被迫将账号凭证托管给不可信云端平台的困境。**文章摆渡** 坚持「**让技术创作更从容**」的信念，以掘金为写作主阵地，首发提供工业级可靠的 CSDN 草稿箱端到端摆渡，并正在向微信公众号、知乎专栏、博客园及个人独立博客扩展。
+## 1.0.0 支持什么
 
-### 为什么选择文章摆渡？
+| 能力 | CSDN | 微信公众号 |
+| --- | --- | --- |
+| 掘金新草稿、历史文章同步 | 支持 | 支持 |
+| 正文格式 | Markdown 规范化与平台适配 | 微信专用 HTML 排版，不照搬源站样式 |
+| 正文图片 | 转存；失败策略可配置 | 外链图片转存；转存失败终止本次同步 |
+| 源文章封面 | 按偏好设置同步 | 自动上传、裁剪并绑定草稿 |
+| 无封面文章 | 支持 | 正常保存草稿，不作为警告 |
+| 代码块 | 保留 Markdown 代码块 | 按微信“插入代码”结构逐行输出，保留空行和缩进 |
+| 草稿更新 | 复用草稿映射，检查公开发布状态 | 按公众号账号隔离映射，写入前校验账号 |
 
-| 传统妥协方案 | 文章摆渡 (Article Ferry) | 创作者收益 |
-| :--- | :--- | :--- |
-| **凭证出海**：Cookie/密码上传至第三方服务器代管 | **纯端侧零信任**：MV3 本地沙箱，0 敏感 Cookie 申请 | 账号隐私绝对安全，数据不出本地 |
-| **画质损耗**：直接复制携带裁剪参数与源站水印 | **无损原图直链**：剥离 OSS/CDN 水印，3 路退避并发 | 架构图与代码截图像素级清晰 |
-| **草稿裂变**：每次微调新增一条垃圾草稿或误覆盖 | **双身份幂等**：`article_id` 与 `draft_id` 双向状态自愈 | 400 删稿自动新建，已发布博文阻断 |
-| **暴力代发**：替用户公开提交，极易误触敏感词风控 | **人机协作底线**：止步目标平台草稿箱，绝不代发 | 终审权留在博主手中，告别封号风险 |
+两个平台独立执行、独立记录结果。一次选择多个平台，不代表所有平台都会同时成功。
 
-> [!IMPORTANT]
-> **人机协作与安全原则 (Human-in-the-loop)**：  
-> 工具专注消灭 90% 的机械搬运、格式清洗与图床转存脏活，**坚决不替用户公开发布**。分类、标签及最终发布确认权永远保留在目标平台草稿箱，严格敬畏平台规则与创作者资产安全。
+### 微信同步说明
 
----
+- 标题、段落、列表、引用、表格和图片按微信格式重新生成；外链保留为编号参考链接，不承诺可点击跳转。
+- 代码块使用微信专用 `section / pre / code` 结构，每行一个节点。语言来自 Markdown 围栏，支持 `js`、`ts` 别名；未标注时不猜测。本版本不额外生成语法高亮。
+- 源封面上传后生成 16:9、1:1、3:4 裁剪结果。**没有源封面也能同步**，若微信发布时要求封面，由你在微信后台补充。
+- 更新失败不会自动转为新建，避免重复草稿。保存结果不明确时，需要先核对草稿箱，再决定是否重试。
+- 任务绑定公众号身份。切换账号后，原账号任务不会使用新账号继续写入；未绑定账号的旧微信草稿记录不会被自动覆盖。
 
-## ✨ 核心特性
+## 安装与升级
 
-### 🚀 智能同步与草稿幂等
-* **发文无感联动**：掘金发文面板点击“确定并发布”时后台秒级触发，不阻塞掘金正常发文与审核；
-* **历史文章批量迁移**：在掘金创作者中心文章管理列表中，一键将历史博文完整摆渡至 CSDN；
-* **双身份草稿幂等**：基于 `article_id` 与 `draft_id` 双重映射，二次修改发文原地覆盖草稿，杜绝重复废稿；
-* **400 删稿自愈**：若旧草稿在 CSDN 被手动删除，更新时智能识别并自动降级为新建草稿，复用已转存图片不卡死。
+### 下载 Release 安装包
 
-### 🧪 体验深化与版权护航 (v0.6.0)
-* **同步前排版预演 (Dry-run)**：任务卡片支持一键预演，静态分析字数、外链图片、分类命中与特有容器，**全程不写草稿、不传图片**，从源头避免产生测试废稿；
-* **CSDN 专栏动态拉取**：设置页默认分类实时拉取当前登录账号的已有专栏（datalist 下拉建议），告别手动打字；
-* **正文摘要自动生成**：优先读取掘金作者手填摘要，缺失时自动提取正文前 100 字纯文本写入 CSDN 编辑器；
-* **掘金首发声明注入**：文章末尾自动注入 `> 本文首发于掘金：文章标题 (原文链接)`，保障多平台 SEO 权重与原创权益。
+1. 在 [Releases](https://github.com/Xxcool/juejin-csdn-extension/releases/latest) 下载 `article-ferry-v1.0.0.zip` 并解压。
+2. 打开 Chrome 的 `chrome://extensions/`，开启“开发者模式”。
+3. 点击“加载已解压的扩展程序”，选择包含 `manifest.json` 的解压目录。
+4. 在同一 Chrome 配置文件中登录掘金和需要同步的目标平台。
+5. 刷新已经打开的掘金页面，让注入脚本生效。
 
-### 🖼️ 高清图床转存与语法清洗
-* **无水印原图直链提取**：智能剔除掘金 CDN 图片的 `~tplv-` 模板与 OSS 裁剪水印参数，转存纯净原图；
-* **特有容器语法转译**：识别掘金特有 `:::tips`、`:::note` 等语法，自动清洗为通用 Markdown 引用块；
-* **三路并发与限流退避**：图片转存采用 3 路有限并发与指数退避重试，正文图失败自动保留外链兜底，防 429 限流。
+升级时，用新包内容更新原加载目录，再在扩展管理页点击“重新加载”。保留原安装实例可保留其本地设置和记录；卸载扩展会清除该扩展的本地数据。升级后同样需要刷新掘金页面。
 
-### 🎨 旗舰工艺设计与系统通知
-* **旗舰工艺版 UI 2.0**：Raycast 质感设计系统、一叶轻舟破浪专属舰徽、物理弹簧分段滑块、呼吸光晕与微胶囊筛选轨；
-* **自适应深色模式**：遵循 Design Tokens，深浅色主题平滑过渡，夜间创作视觉柔和不刺眼；
-* **Chrome 原生系统通知**：多图与长耗时任务在后台完成后系统主动提醒，点击直达草稿编辑页；失败任务即时播报；
-* **轻量远程健康预警**：定时拉取 GitHub 兼容性状态，接口变动提前警示，失败静默容错。
+### 从源码运行
 
----
+建议使用与 CI 一致的 Node.js 22 和 npm。
 
-## 🛡️ 可靠性与安全底座
-
-<div align="center">
-  <img src="https://raw.githubusercontent.com/Xxcool/juejin-csdn-extension/master/assets/article/sync-pipeline.svg" alt="一篇文章的摆渡链路" width="800">
-  <p><i>▲ 端到端处理管线：从用户明确触发到草稿安全落地的每一步均具备失败隔离与状态出口</i></p>
-</div>
-
-* **零 Cookie 权限**：不申请 `cookies` 权限，不存储用户账号密码，直接复用当前浏览器现有登录态；
-* **端侧去中心化**：所有清洗、渲染与网络请求均在本地闭环执行，不经由任何第三方代理或服务器；
-* **存储瘦身防爆仓**：持久化剥离正文大文本，采用双路径按需拉取，彻底规避 `storage.local` 10MB 配额上限；
-* **结构化脱敏诊断**：细分 8 类错误与 6 大执行阶段，支持一键复制脱敏诊断日志，快速排错。
-
----
-
-## 📥 安装与使用
-
-### 方式一：从 GitHub Releases 离线安装（推荐）
-1. 前往 [Releases 发行页](https://github.com/Xxcool/juejin-csdn-extension/releases) 下载最新的 `article-ferry-v*.zip` 并解压；
-2. 打开 Chrome 浏览器，访问 `chrome://extensions`；
-3. 开启右上角的 **“开发者模式”**；
-4. 点击左上角 **“加载已解压的扩展程序”**，选择解压后的目录；
-5. 在同一浏览器中登录掘金与 CSDN，点击扩展图标即可开始使用。
-
-### 方式二：从源码构建与开发
-要求 **Node.js 20+**：
 ```bash
 git clone https://github.com/Xxcool/juejin-csdn-extension.git
 cd juejin-csdn-extension
-npm install
-npm run check       # TypeScript 严格类型检查
-npm test            # Vitest 全量单元测试 (41 tests)
-npm run build       # esbuild 生产产物打包 (输出到 dist/)
-npm run docs:dev    # 启动 VitePress 官网文档本地热重载调试 (http://localhost:5173)
-npm run docs:build  # 构建 VitePress 官网静态产物 (输出至 docs/.vitepress/dist)
+npm ci
+npm run check
+npm test
+npm run build
 ```
 
+然后在 Chrome 扩展管理页加载仓库中的 `dist/` 目录。
 
----
+## 如何同步
 
-## 🎯 实操指南
+### 三个入口，同一套操作
 
-### 1. 撰写新文章同步
-1. 在掘金写完文章并点击右上角“发布”；
-2. 发布面板中默认勾选 **“同步到 CSDN 草稿”**；
-3. 点击“确定并发布”，后台自动启动同步管道；
-4. 扩展弹窗中可查看实时进度，点击 **“草稿 ↗”** 直达 CSDN 编辑器完成最终确认。
+- **新文章编辑器**：写完并保存掘金草稿，点击“同步多平台”。
+- **创作者中心**：在自己的文章管理列表使用“同步多平台”。
+- **个人主页**：在自己文章的操作菜单中使用“同步多平台”。
 
-### 2. 同步前排版预演 (Dry-run)
-1. 在扩展弹窗的任务记录卡片中，点击 **“预演”** 按钮；
-2. 弹窗将立即展示字数统计、命中分类、待转存图片清单、容器转译详情与潜在风险提示；
-3. 确认无误后再发起同步，从源头避免产生测试废稿。
+点击后，弹窗检测登录状态。未登录的平台先点“去登录”，返回后刷新检测；勾选目标平台，再点“确认同步”。默认勾选受偏好设置控制，每次提交前都可以修改，刷新登录状态不会重新选中已取消的平台。
 
----
+这是一项主动触发的同步操作，**不再依赖点击掘金“确定并发布”自动同步**，也不是持续双向同步。
 
-## 🔒 权限与隐私声明
+### 查看结果和再次同步
 
-本项目严格遵循最小权限原则：
+扩展弹窗的“同步记录”支持查看成功、失败和进行中的任务。平台下拉框用于查看对应平台登录状态；每条记录显示目标平台、进度、诊断信息和草稿入口。
 
-| 权限声明 / 域名 | 核心用途 |
-| :--- | :--- |
-| `storage` | 在本地浏览器保存用户的同步偏好设置与任务状态记录（不上传云端） |
-| `notifications` | 长耗时/多图任务完成或失败时触发 Chrome 原生系统通知，点击直达草稿 |
-| `alarms` | 每 12 小时触发一次轻量远程健康检查，预警平台接口变动 |
-| `declarativeNetRequestWithHostAccess` | 仅为必要的掘金/CSDN 官方接口补充 Web 客户端必需的校验请求头 |
-| `juejin.cn` / `api.juejin.cn` | 注入发文同步控件，并拉取创作者主动选择同步的文章内容 |
-| 掘金图片 CDN 域 | 下载正文与封面高清图片以便转存至目标平台 |
-| `bizapi.csdn.net` | 检查 CSDN 登录在线状态、拉取个人专栏分类、获取上传凭证及保存草稿 |
-| CSDN 图片存储服务 | 将转存后的图片流安全写入创作者个人的 CSDN 空间 |
+- **已保存**：点击“草稿”前往目标平台检查。
+- **等待确认**：在同步记录中确认更新后才会写入，不等于同步成功。
+- **失败或需处理**：先按诊断提示处理登录、图片或平台接口问题。
+- **保存结果不确定**：先查看目标草稿箱。此类任务不参加批量重试，单条重试会再次要求确认，以免重复创建。
 
----
+再次同步可能覆盖对应草稿的手工修改，建议开启“更新草稿前确认”。删除或清空本地同步记录不删除目标平台草稿，并会保留已有草稿映射；它不是“另存新草稿”操作。
 
-## 🤝 参与贡献与开源协议
+## 偏好设置
 
-本项目基于 [MIT License](LICENSE) 协议开源，欢迎提交 Issue 与 PR。第三方依赖声明详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+- 平台默认选择：控制同步弹窗首次检测后的默认勾选，不表示自动发布。
+- CSDN 分类专栏：读取已有专栏、设置默认分类，或按掘金标签匹配分类。
+- CSDN 内容选项：封面、摘要、来源声明和图片失败策略。
+- 更新草稿前确认：已关联草稿的再次同步先进入待确认状态。
+
+记录中的“预演”目前是 **CSDN 内容分析**，不是微信公众号排版预览，也不执行上传或保存。
+
+## 使用边界与常见问题
+
+**同步后还需要重新上传图片吗？**
+
+正常情况下不需要：扩展转存正文图片和已有源封面。图片源站拒绝下载、地址需要额外权限、格式不被目标平台接受等情况仍可能失败，请查看诊断；不承诺支持任意图床。微信正文图转存失败时不会把不完整内容当作成功。
+
+**代码块会与掘金完全相同吗？**
+
+不会复制掘金的 CSS。微信代码块按其编辑器结构输出，保留代码行与缩进；颜色、高亮、长行显示及手机端效果以微信编辑器和预览为准。
+
+**为什么需要保持平台登录？**
+
+扩展复用浏览器登录会话，不代替扫码登录，也不绕过验证码或平台风控。登录过期时需要重新登录。微信网页接口和不同账号的能力可能变化，失败时不要反复点击同步。
+
+**更新微信草稿失败会新建一篇吗？**
+
+不会。扩展不会把接口异常当成草稿不存在。请检查原草稿、账号归属和诊断信息后再处理。
+
+**扩展重新加载后没有按钮？**
+
+先刷新掘金页面，并确认正在自己的编辑器或文章管理入口操作。仅重新加载扩展不会替换已打开页面中的旧脚本。
+
+## 权限与隐私
+
+不申请 `cookies` 权限，不保存账号密码，不将登录凭据交给中转服务。浏览器仍会在平台请求中携带必要会话，文章和图片会发送到你选择的目标平台，因此“本地处理”不等于“没有网络传输”。
+
+本地存储包含设置、任务元信息、账号标识和草稿映射，历史记录不持久保存全文 Markdown。微信草稿链接可能包含页面 token，请勿公开分享未经检查的存储导出、日志或链接。
+
+| 权限或访问范围 | 用途 |
+| --- | --- |
+| `storage` | 保存偏好、任务状态与草稿映射 |
+| `notifications` | 同步结果通知 |
+| `alarms` | 定期检查兼容性状态 |
+| `declarativeNetRequestWithHostAccess` | 为已声明的平台接口补充所需请求头 |
+| 掘金及声明的图片 CDN | 注入同步入口、读取源草稿和下载图片 |
+| CSDN API 与图片存储服务 | 检查登录、读取分类、上传图片和保存草稿 |
+| 微信公众平台 | 检查登录、上传和裁剪图片、保存草稿 |
+
+完整说明见 [隐私政策](PRIVACY.md)、[安全说明](SECURITY.md) 和 [manifest.json](manifest.json)。
+
+## 开发与验证
+
+项目使用 TypeScript、esbuild、Vitest 和 marked；网站文档已独立维护，本仓库不提供 `docs:dev` 或 `docs:build` 命令。
+
+| 命令 | 用途 |
+| --- | --- |
+| `npm run check` | TypeScript 类型检查 |
+| `npm test` | 自动化回归测试 |
+| `npm run build` | 本地构建至 `dist/`，包含 source map |
+| `npm run dev` | 监听源码变动并重新构建；浏览器仍需重新加载扩展 |
+| `npm run build:release` | 不包含 source map 的发布构建 |
+| `npm run release:zip` | 检查、测试、发布构建并生成 ZIP |
+| `npm run release:notes` | 从 CHANGELOG 提取当前版本说明 |
+
+1.0.0 发布前通过 84 项自动化测试，并由维护者完成本地功能验收。测试覆盖任务、账号隔离、异常写入、内容转换、图片与封面契约等，不代表所有账号类型、外部图床和微信客户端都已覆盖。
+
+推送 `v*` 标签会触发仓库的 Release workflow，重新校验、构建并上传 `article-ferry-v<版本>.zip`。版本号需保持 `package.json`、锁文件和 `manifest.json` 一致。
+
+## 反馈与贡献
+
+欢迎通过 [Issues](https://github.com/Xxcool/juejin-csdn-extension/issues) 反馈问题。请提供扩展版本、操作入口、目标平台、复现步骤及脱敏诊断；不要提交 Cookie、token、上传票据或私密文章正文。
+
+本项目采用 [MIT License](LICENSE)。第三方依赖说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

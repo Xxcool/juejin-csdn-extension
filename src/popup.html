@@ -22,15 +22,26 @@
         <div class="brand-text-col">
           <div class="brand-name-row">
             <strong id="page-title">文章摆渡</strong>
-            <span id="brand-version" class="brand-tag">v0.6.1</span>
+            <span id="brand-version" class="brand-tag">v1.0.0</span>
           </div>
           <span class="brand-motto">一键摆渡 · 草稿安全着陆</span>
         </div>
       </div>
-      <button id="login-state" class="platform-pill checking" title="点击检查或登录 CSDN" aria-label="CSDN 状态">
-        <span class="platform-dot"></span>
-        <span id="login-text" class="platform-text">检测中…</span>
-      </button>
+      <div class="platform-switcher">
+        <button id="platform-trigger" class="platform-pill checking" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="platform-menu">
+          <span class="platform-dot"></span>
+          <span id="platform-trigger-text" class="platform-text">CSDN 检测中…</span>
+          <svg class="platform-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div id="platform-menu" class="platform-menu" role="menu" hidden>
+          <button id="login-state" class="platform-option checking selected" type="button" role="menuitemradio" aria-checked="true" data-platform="csdn">
+            <span class="platform-dot"></span><span id="login-text" class="platform-text">CSDN 检测中…</span><span class="platform-check">✓</span>
+          </button>
+          <button id="wechat-login-state" class="platform-option checking" type="button" role="menuitemradio" aria-checked="false" data-platform="wechat">
+            <span class="platform-dot"></span><span id="wechat-login-text" class="platform-text">微信检测中…</span><span class="platform-check">✓</span>
+          </button>
+        </div>
+      </div>
     </header>
 
     <div id="health-banner" class="health-banner" hidden>
@@ -81,16 +92,24 @@
           <div class="settings-group-card">
             <label class="setting-item">
               <span class="setting-text">
-                <b>发布后自动勾选同步</b>
-                <small>掘金发布面板中的 CSDN 选项默认开启</small>
+                <b>默认选择 CSDN</b>
+                <small>打开“同步多平台”弹窗时预先勾选 CSDN</small>
               </span>
               <input id="auto-sync" type="checkbox">
               <i class="switch"></i>
             </label>
             <label class="setting-item">
               <span class="setting-text">
-                <b>同步文章封面</b>
-                <small>关闭后仅转存正文图片，不迁移封面图</small>
+                <b>默认选择微信公众号</b>
+                <small>打开“同步多平台”弹窗时预先勾选微信公众号</small>
+              </span>
+              <input id="wechat-auto-sync" type="checkbox">
+              <i class="switch"></i>
+            </label>
+            <label class="setting-item">
+              <span class="setting-text">
+                <b>CSDN 同步文章封面</b>
+                <small>微信公众号完整同步始终要求源文章封面</small>
               </span>
               <input id="sync-cover" type="checkbox">
               <i class="switch"></i>
@@ -187,7 +206,7 @@
           </div>
 
           <div class="notice-footer">
-            <span id="app-version">版本 v0.6.1 · Chrome MV3</span>
+            <span id="app-version">版本 v1.0.0 · Chrome MV3</span>
             <span class="about-security-tag">🛡️ 纯端侧零信任</span>
           </div>
         </div>
