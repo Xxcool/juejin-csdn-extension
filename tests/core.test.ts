@@ -9,6 +9,7 @@ import {defaultSettings,formatCategoryMappings,normalizeSettings,parseCategoryMa
 import {buildTaskNotification} from '../src/core/notify';
 import {fetchHealthStatus,isHealthAlert,parseHealthPayload,refreshHealthIfNeeded} from '../src/core/health';
 import {fetchJuejinDraftByArticleId,fetchJuejinDraftByDraftId} from '../src/source/juejin-api';
+import {isJuejinPublishRequest,parseJuejinPublishSuccess} from '../src/source/juejin-publish';
 import {applyImageTransfers,buildDryRunReport,buildSaveArticleBody,buildSourceAttribution,checkCsdnAuth,collectExternalImages,enforceImageFailurePolicy,extractSummary,fetchCsdnArticleState,fetchCsdnCategories,imageExtension,normalizeMarkdown,sanitizeJuejinContainers,saveDraftViaApi,stripJuejinImageParams,summarizeImageTransfers,validateCsdnArticle} from '../src/targets/csdn-api';
 import {collectWechatImageUrls,compileWechatHtml,replaceWechatImageUrls} from '../src/targets/wechat-content';
 import {buildWechatDraftForm,calculateCoverCrop,parseWechatMeta,saveWechatDraft} from '../src/targets/wechat-api';
@@ -448,6 +449,36 @@ describe('v0.6.0 体验深化',()=>{
     expect(JSON.parse(bodies[0])).toMatchObject({id:'deleted-1',is_new:0});
     expect(JSON.parse(bodies[1])).toMatchObject({is_new:1});
     expect(JSON.parse(bodies[1]).id).toBeUndefined();
+  });
+});
+
+describe('掘金发布成功观察',()=>{
+  const url='https://api.juejin.cn/content_api/v1/article/publish?aid=2608&uuid=test';
+  it('只识别发布接口 POST 请求',()=>{
+    expect(isJuejinPublishRequest(url,'POST')).toBe(true);
+    expect(isJuejinPublishRequest('https://juejin.cn/content_api/v1/article/publish','POST')).toBe(true);
+    expect(isJuejinPublishRequest(url,'GET')).toBe(false);
+    expect(isJuejinPublishRequest('https://api.juejin.cn/content_api/v1/article_draft/update','POST')).toBe(false);
+    expect(isJuejinPublishRequest('https://example.com/content_api/v1/article/publish','POST')).toBe(false);
+  });
+  it('业务成功且包含文章标识时返回草稿与文章身份',()=>{
+    expect(parseJuejinPublishSuccess(url,'POST',JSON.stringify({draft_id:'draft-1'}),200,JSON.stringify({err_no:0,err_msg:'success',data:{article_id:'article-1'}})))
+      .toEqual({draftId:'draft-1',articleId:'article-1'});
+    expect(parseJuejinPublishSuccess(url,'POST',JSON.stringify({draft_id:'draft-1'}),200,JSON.stringify({err_no:0,data:{draft_id:'draft-1',article_id:123}})))
+      .toEqual({draftId:'draft-1',articleId:'123'});
+  });
+  it.each([
+    [500,{err_no:0,data:{article_id:'article-1'}}],
+    [200,{err_no:2,err_msg:'参数错误',data:null}],
+    [200,{err_no:0,data:{}}],
+    [200,{err_no:0,data:{article_id:'0'}}],
+    [200,{err_no:0,data:{article_id:0}}]
+  ])('HTTP 或业务响应不完整或缺少有效文章 ID 时不触发同步', (status,response)=>{
+    expect(parseJuejinPublishSuccess(url,'POST',JSON.stringify({draft_id:'draft-1'}),status,JSON.stringify(response))).toBeUndefined();
+  });
+  it('请求缺少草稿身份时不触发同步',()=>{
+    expect(parseJuejinPublishSuccess(url,'POST','{}',200,JSON.stringify({err_no:0,data:{article_id:'article-1'}}))).toBeUndefined();
+    expect(parseJuejinPublishSuccess(url,'POST',JSON.stringify({draft_id:'0'}),200,JSON.stringify({err_no:0,data:{article_id:'article-1'}}))).toBeUndefined();
   });
 });
 
