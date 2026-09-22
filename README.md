@@ -11,6 +11,7 @@
 
 [![Release](https://img.shields.io/github/v/release/Xxcool/juejin-csdn-extension)](https://github.com/Xxcool/juejin-csdn-extension/releases)
 [![CI](https://github.com/Xxcool/juejin-csdn-extension/actions/workflows/ci.yml/badge.svg)](https://github.com/Xxcool/juejin-csdn-extension/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-100%20passed-brightgreen)](tests)
 [![License](https://img.shields.io/github/license/Xxcool/juejin-csdn-extension)](LICENSE)
 
 文章摆渡是一款 Chrome Manifest V3 浏览器扩展。它读取你主动选择的掘金文章或编辑器草稿，智能处理正文与图片，再安全着陆到目标平台的草稿箱。所有内容转换均在浏览器本地扩展中完成，直接与源站和目标平台通信，**不依赖任何托管账号密码的中转服务器**。
