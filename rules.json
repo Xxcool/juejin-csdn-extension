@@ -126,5 +126,21 @@
       "excludedInitiatorDomains": ["mp.weixin.qq.com"],
       "resourceTypes": ["xmlhttprequest"]
     }
+  },
+  {
+    "id": 9,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {"header": "Origin", "operation": "set", "value": "https://juejin.cn"},
+        {"header": "Referer", "operation": "set", "value": "https://juejin.cn/"}
+      ]
+    },
+    "condition": {
+      "urlFilter": "-private.juejin.cn/",
+      "excludedInitiatorDomains": ["juejin.cn"],
+      "resourceTypes": ["xmlhttprequest"]
+    }
   }
 ]

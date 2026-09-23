@@ -2,7 +2,7 @@
 import type {Article,TaskProgress} from '../types';
 import {mapConcurrent,retry} from '../core/async';
 import {SyncError} from '../core/diagnostic';
-import {extractSummary,imageExtension,stripJuejinImageParams} from './csdn-api';
+import {downloadImageBlob,extractSummary,imageExtension,stripJuejinImageParams} from './csdn-api';
 import {collectWechatImageUrls,compileWechatHtml,replaceWechatImageUrls} from './wechat-content';
 
 const HOME='https://mp.weixin.qq.com/';
@@ -39,16 +39,7 @@ async function requireMeta(expectedAccountId?:string){
 export async function requireWechatAccount(expectedAccountId?:string){return(await requireMeta(expectedAccountId)).userName;}
 
 async function downloadImage(src:string){
-  const direct=stripJuejinImageParams(src);
-  let last:unknown;
-  for(const url of direct===src?[src]:[direct,src])try{
-    const response=await fetch(url,{credentials:new URL(url).hostname.endsWith('-private.juejin.cn')?'include':'omit'});
-    if(!response.ok)throw new Error(`HTTP ${response.status}`);
-    const blob=await response.blob();
-    if(!blob.type.startsWith('image/'))throw new Error('返回内容不是图片');
-    return blob;
-  }catch(error){last=error;}
-  throw new SyncError(`图片下载失败：${src}（${(last as Error)?.message||'未知错误'}）`,'content','images');
+  return downloadImageBlob(src);
 }
 
 async function uploadImage(src:string,meta:WechatMeta):Promise<UploadedImage>{

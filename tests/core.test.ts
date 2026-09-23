@@ -10,7 +10,7 @@ import {buildTaskNotification} from '../src/core/notify';
 import {fetchHealthStatus,isHealthAlert,parseHealthPayload,refreshHealthIfNeeded} from '../src/core/health';
 import {fetchJuejinDraftByArticleId,fetchJuejinDraftByDraftId} from '../src/source/juejin-api';
 import {isJuejinPublishRequest,parseJuejinPublishSuccess} from '../src/source/juejin-publish';
-import {applyImageTransfers,buildDryRunReport,buildSaveArticleBody,buildSourceAttribution,checkCsdnAuth,collectExternalImages,enforceImageFailurePolicy,extractSummary,fetchCsdnArticleState,fetchCsdnCategories,imageExtension,normalizeMarkdown,sanitizeJuejinContainers,saveDraftViaApi,stripJuejinImageParams,summarizeImageTransfers,validateCsdnArticle} from '../src/targets/csdn-api';
+import {applyImageTransfers,buildDryRunReport,buildSaveArticleBody,buildSourceAttribution,checkCsdnAuth,collectExternalImages,downloadImageBlob,enforceImageFailurePolicy,extractSummary,fetchCsdnArticleState,fetchCsdnCategories,imageExtension,isJuejinPrivateImage,normalizeMarkdown,sanitizeJuejinContainers,saveDraftViaApi,stripJuejinImageParams,summarizeImageTransfers,validateCsdnArticle} from '../src/targets/csdn-api';
 import {collectWechatImageUrls,compileWechatHtml,replaceWechatImageUrls} from '../src/targets/wechat-content';
 import {buildWechatDraftForm,calculateCoverCrop,parseWechatMeta,saveWechatDraft} from '../src/targets/wechat-api';
 import type {Article,SyncTask} from '../src/types';
@@ -571,5 +571,64 @@ describe('v1.0.0 微信公众号完整同步',()=>{
     vi.stubGlobal('createImageBitmap',vi.fn(async()=>({width:1600,height:900,close:()=>{}})));
     await expect(saveWechatDraft(testArticle,{appMsgId:'old-deleted-draft-id',accountId:'gh_test'})).rejects.toMatchObject({category:'interrupted'});
     expect(callCount).toBe(1);
+  });
+});
+
+describe('掘金私有图床与防盗链支持',()=>{
+  const samplePrivateUrl='https://p0-xtjj-private.juejin.cn/tos-cn-i-73owjymdk6/f769cd7aad8e4c0d9af66abef25ee254~tplv-73owjymdk6-jj-mark-v1:0:0:0:0:5o6Y6YeR5oqA5pyv56S-5Yy6IEAg5aSP5aSp6KaB5Zad5Yaw5Y-v5LmQ:q75.awebp?policy=eyJ2bSI6MywidWlkIjoiNDI2NTc2MDg0NTQ2ODI5NiJ9&rk3s=e9ecf3d6&x-orig-authkey=f32326d3454f2ac7e96d3d06cdbb035152127018&x-orig-expires=1790226146&x-orig-sign=iUtmyS0OiBNnkohnQQvZPjmMC7o%3D';
+
+  it('准确识别掘金私有存储与带签名外链图片',()=>{
+    expect(isJuejinPrivateImage(samplePrivateUrl)).toBe(true);
+    expect(isJuejinPrivateImage('https://p1-xtjj-private.juejin.cn/abc.png')).toBe(true);
+    expect(isJuejinPrivateImage('https://example.com/pic.jpg?x-orig-sign=123')).toBe(true);
+    expect(isJuejinPrivateImage('https://p3-juejin.byteimg.com/plain.png')).toBe(false);
+    expect(isJuejinPrivateImage('https://img.example.com/a.png')).toBe(false);
+  });
+
+  it('私有签名图片原样保留，绝不裁剪破坏路径签名',()=>{
+    expect(stripJuejinImageParams(samplePrivateUrl)).toBe(samplePrivateUrl);
+    const escaped=samplePrivateUrl.replace(/&/g,'&amp;');
+    expect(stripJuejinImageParams(escaped)).toBe(escaped);
+  });
+
+  it('DNR 规则包含私有图床防盗链伪装规则',()=>{
+    const typed=rules as {id:number;action:{requestHeaders:{header:string;value:string}[]};condition:{urlFilter?:string}}[];
+    const privateRule=typed.find(r=>r.id===9);
+    expect(privateRule).toBeDefined();
+    expect(privateRule?.condition.urlFilter).toBe('-private.juejin.cn/');
+    expect(privateRule?.action.requestHeaders).toEqual([
+      {header:'Origin',operation:'set',value:'https://juejin.cn'},
+      {header:'Referer',operation:'set',value:'https://juejin.cn/'}
+    ]);
+  });
+
+  it('下载私有图片时直连 403 自动降级通过打开的掘金 Tab 代下',async()=>{
+    const dataUrl='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
+      const url=String(input);
+      if(url.startsWith('data:image/'))return new Response(new Blob(['fake-img'],{type:'image/png'}));
+      return new Response('',{status:403});
+    }));
+    vi.stubGlobal('chrome',{
+      tabs:{
+        query:vi.fn().mockResolvedValue([{id:101,url:'https://juejin.cn/editor/drafts/123',active:true}]),
+        sendMessage:vi.fn().mockResolvedValue({ok:true,dataUrl})
+      }
+    });
+
+    const blob=await downloadImageBlob(samplePrivateUrl);
+    expect(blob.type).toBe('image/png');
+    expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(101,{type:'DOWNLOAD_IMAGE_VIA_PAGE',url:samplePrivateUrl});
+  });
+
+  it('下载私有图片时直连 403 且无可用 Tab 代下时抛出网络/内容异常',async()=>{
+    vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response('',{status:403})));
+    vi.stubGlobal('chrome',{
+      tabs:{
+        query:vi.fn().mockResolvedValue([]),
+        sendMessage:vi.fn()
+      }
+    });
+    await expect(downloadImageBlob(samplePrivateUrl)).rejects.toThrow('图片下载失败 (403)');
   });
 });

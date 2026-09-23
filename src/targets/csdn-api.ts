@@ -215,11 +215,25 @@ export function buildSourceAttribution(article:Article):string{
   return`\n\n---\n\n> 本文首发于掘金${title?`：[${title}](${url})`:`：${url}`}`;
 }
 
-/** 剔除掘金图片 CDN 的 OSS 裁剪/水印参数（~tplv- 模板段与 x-oss-process 查询），失败时调用方回退原始链接。 */
+/** 判断图片是否为掘金私有存储或带有数字签名的外链。 */
+export function isJuejinPrivateImage(src:string):boolean{
+  try{
+    const url=new URL(src.replace(/&amp;/g,'&'));
+    return url.hostname.endsWith('-private.juejin.cn')||
+      url.searchParams.has('x-orig-sign')||
+      url.searchParams.has('x-orig-authkey')||
+      url.searchParams.has('policy');
+  }catch{
+    return false;
+  }
+}
+
+/** 剔除掘金图片 CDN 的 OSS 裁剪/水印参数（~tplv- 模板段与 x-oss-process 查询）；私有签名链接保持原样以防破坏签名。 */
 export function stripJuejinImageParams(src:string):string{
   try{
-    const url=new URL(src);
+    const url=new URL(src.replace(/&amp;/g,'&'));
     if(!/(^|\.)((juejin\.cn)|(byteimg\.com)|(bytecdn\.cn))$/i.test(url.hostname))return src;
+    if(isJuejinPrivateImage(src))return src;
     let changed=false;
     const tplvIndex=url.pathname.indexOf('~tplv-');
     if(tplvIndex>0){
@@ -254,13 +268,40 @@ export function imageExtension(src:string,blob:Blob){
   return mimeExtension[blob.type.toLowerCase()]||'jpg';
 }
 
-async function downloadImageBlob(src:string):Promise<Blob>{
+/** 尝试通过已打开的掘金页面标签（Content Script）在第一方登录态上下文中代为下载图片。 */
+async function downloadImageViaPage(src:string):Promise<Blob|null>{
+  if(typeof chrome==='undefined'||!chrome.tabs?.query||!chrome.tabs?.sendMessage)return null;
+  try{
+    const tabs=await chrome.tabs.query({url:['https://juejin.cn/*','https://*.juejin.cn/*']});
+    const sorted=[...tabs].sort((a,b)=>{
+      const aEditor=a.url?.includes('/editor/')?1:0;
+      const bEditor=b.url?.includes('/editor/')?1:0;
+      if(aEditor!==bEditor)return bEditor-aEditor;
+      return(b.active?1:0)-(a.active?1:0);
+    });
+    for(const tab of sorted){
+      if(!tab.id)continue;
+      try{
+        const response=await chrome.tabs.sendMessage(tab.id,{type:'DOWNLOAD_IMAGE_VIA_PAGE',url:src}) as {ok?:boolean;dataUrl?:string}|undefined;
+        if(response?.ok&&typeof response.dataUrl==='string'){
+          const fetched=await fetch(response.dataUrl);
+          const blob=await fetched.blob();
+          if(blob.type.startsWith('image/'))return blob;
+        }
+      }catch{}
+    }
+  }catch{}
+  return null;
+}
+
+export async function downloadImageBlob(src:string):Promise<Blob>{
+  const targetUrl=src.replace(/&amp;/g,'&');
+  const isPrivate=isJuejinPrivateImage(targetUrl);
   // 掘金私有 CDN 的签名链接仍需当前登录会话；其他外链图片不携带站点凭据。
-  const hostname=new URL(src).hostname;
-  const credentials:RequestCredentials=hostname.endsWith('-private.juejin.cn')?'include':'omit';
-  // 无水印直链优先（剔除 ~tplv- 模板与 x-oss-process 参数）；直链 403/失效时回退原始链接。
-  const direct=stripJuejinImageParams(src);
-  const attempts=direct!==src?[direct,src]:[src];
+  const credentials:RequestCredentials=isPrivate?'include':'omit';
+  // 无水印直链优先（剔除 ~tplv- 模板与 x-oss-process 参数）；私有签名链接保持原样以防破坏签名。
+  const direct=stripJuejinImageParams(targetUrl);
+  const attempts=direct!==targetUrl?[direct,targetUrl]:[targetUrl];
   let lastError:unknown;
   for(const url of attempts){
     try{
@@ -276,6 +317,13 @@ async function downloadImageBlob(src:string):Promise<Blob>{
       lastError=error;
     }
   }
+
+  // 掘金私有图床若受限于 Service Worker 跨站凭据隔离（如 403），尝试通过打开的掘金页面 Tab 代为下载（同站第一方上下文）。
+  if(isPrivate){
+    const pageBlob=await downloadImageViaPage(targetUrl);
+    if(pageBlob)return pageBlob;
+  }
+
   throw lastError instanceof Error?lastError:new SyncError(`图片下载失败：${src}`,'network','images');
 }
 

@@ -50,6 +50,7 @@ function teardownContentScript(){
   window.removeEventListener('focus',onWindowFocus);
   document.removeEventListener(PUBLISH_EVENT,handleJuejinPublished);
   document.removeEventListener(PUBLISH_START_EVENT,handleJuejinPublishStart);
+  try{chrome.runtime.onMessage.removeListener(onRuntimeMessage);}catch{}
   pendingPublishes.clear();
   document.querySelector('.jc-sync-dialog-root')?.remove();
 }
@@ -677,6 +678,30 @@ function onWindowFocus(){
   if(currentPublishRefresh)void currentPublishRefresh();
 }
 
+function onRuntimeMessage(message:any,_sender:chrome.runtime.MessageSender,sendResponse:(response:any)=>void){
+  if(!isExtensionAlive()){
+    teardownContentScript();
+    return false;
+  }
+  if(message?.type==='DOWNLOAD_IMAGE_VIA_PAGE'&&typeof message.url==='string'){
+    (async()=>{
+      try{
+        const response=await fetch(message.url,{credentials:'include'});
+        if(!response.ok)throw new Error(`HTTP ${response.status}`);
+        const blob=await response.blob();
+        const reader=new FileReader();
+        reader.onload=()=>sendResponse({ok:true,dataUrl:reader.result});
+        reader.onerror=()=>sendResponse({ok:false,error:'读取图片失败'});
+        reader.readAsDataURL(blob);
+      }catch(err){
+        sendResponse({ok:false,error:(err as Error)?.message||'页面下载图片失败'});
+      }
+    })();
+    return true;
+  }
+  return false;
+}
+
 if(isExtensionAlive()){
   void safeSendMessage({type:'GET_SETTINGS'}).then(result=>{
     if(!isExtensionAlive())return;
@@ -688,6 +713,7 @@ if(isExtensionAlive()){
     globalObserver.observe(document.documentElement,{childList:true,subtree:true});
   }).catch(()=>{});
 
+  chrome.runtime.onMessage.addListener(onRuntimeMessage);
   document.addEventListener(PUBLISH_EVENT,handleJuejinPublished);
   document.addEventListener(PUBLISH_START_EVENT,handleJuejinPublishStart);
   window.addEventListener('focus',onWindowFocus);

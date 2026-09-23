@@ -48,7 +48,7 @@
 
 ### 📦 下载 Release 安装包（推荐）
 
-1. 📥 前往 [Releases 页面](https://github.com/Xxcool/juejin-csdn-extension/releases/latest) 下载最新版 `article-ferry-v1.1.0.zip` 并解压。
+1. 📥 前往 [Releases 页面](https://github.com/Xxcool/juejin-csdn-extension/releases/latest) 下载最新版 `article-ferry-v1.1.1.zip` 并解压。
 2. 🌐 打开 Chrome 浏览器，访问 `chrome://extensions/`，开启右上角的 **“开发者模式”**。
 3. 📂 点击 **“加载已解压的扩展程序”**，选择解压出的目录。
 4. 🔑 在同一 Chrome 配置文件中登录掘金和需要同步的目标平台。
