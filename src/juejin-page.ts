@@ -9,7 +9,7 @@ const PUBLISH_ATTRIBUTE='data-article-ferry-published';
 const DRAFT_TAG_ENDPOINT=/article_draft\/(?:save|detail)/;
 
 type CodeMirrorElement=HTMLElement&{CodeMirror?:{getValue():string}};
-type DraftPayload={data?:{article_draft?:{id?:string;tags?:{tag_name?:string}[];cover_image?:string;brief?:string};tags?:{tag_name?:string}[];cover_image?:string;brief?:string}};
+type DraftPayload={data?:{article_draft?:{id?:string;tags?:{tag_name?:string}[];cover_image?:string;brief_content?:string};tags?:{tag_name?:string}[];cover_image?:string;brief_content?:string}};
 
 const metadata=new EditorMetadataCache();
 let publishSequence=0;
@@ -28,6 +28,7 @@ function rememberTags(url:string,text:string,requestDraftId:string){
 function beginPublish(url:string,method:string){
   if(!isJuejinPublishRequest(url,method))return undefined;
   const requestId=String(++publishSequence);
+  console.log('[文章摆渡] 侦测到掘金发布请求:',url,{requestId});
   document.documentElement.setAttribute(PUBLISH_ATTRIBUTE,JSON.stringify({requestId}));
   document.dispatchEvent(new Event(PUBLISH_START_EVENT));
   document.documentElement.removeAttribute(PUBLISH_ATTRIBUTE);
@@ -36,6 +37,7 @@ function beginPublish(url:string,method:string){
 
 function finishPublish(requestId:string|undefined,success?:ReturnType<typeof parseJuejinPublishSuccess>){
   if(!requestId)return;
+  console.log('[文章摆渡] 掘金发布请求结束:',{requestId,success});
   document.documentElement.setAttribute(PUBLISH_ATTRIBUTE,JSON.stringify({requestId,...success}));
   document.dispatchEvent(new Event(PUBLISH_EVENT));
   document.documentElement.removeAttribute(PUBLISH_ATTRIBUTE);
@@ -60,9 +62,10 @@ function observeDraftApi(){
           if(DRAFT_TAG_ENDPOINT.test(url))rememberTags(url,await response.clone().text(),requestDraftId);
           if(requestId){
             const body=await requestBody;
-            success=parseJuejinPublishSuccess(url,method,body,response.status,await response.clone().text());
+            const text=await response.clone().text();
+            success=parseJuejinPublishSuccess(url,method,body,response.status,text,requestDraftId);
           }
-        }catch{}
+        }catch(err){console.warn('[文章摆渡] 解析发布响应异常 (fetch):',err);}
         return response;
       }finally{
         // HTTP、业务及网络失败均释放本次快照，不触发同步。
@@ -87,8 +90,8 @@ function observeDraftApi(){
         try{
           const text=typeof this.response==='string'?this.response:JSON.stringify(this.response);
           rememberTags(url,text,requestDraftId);
-          success=parseJuejinPublishSuccess(url,method,body,this.status,text);
-        }catch{}
+          success=parseJuejinPublishSuccess(url,method,body,this.status,text,requestDraftId);
+        }catch(err){console.warn('[文章摆渡] 解析发布响应异常 (XHR):',err);}
         finishPublish(requestId,success);
       };
       this.addEventListener('loadend',onEnd,{once:true});
@@ -113,14 +116,16 @@ function editorSnapshot(){
   const cached=metadata.get(draftId);
   const summary=document.querySelector<HTMLTextAreaElement>('.panel .summary textarea')?.value?.trim();
   const cover=document.querySelector<HTMLImageElement>('.panel .preview-image')?.src;
+  const coverControl=[...document.querySelectorAll<HTMLElement>('.panel .form-item')].find(item=>/封面/.test(item.querySelector('.label')?.textContent||''));
   return{
     title:titleInput?.value.trim()||'',
     markdown,
     draftId,
     sourceUrl:location.href,
     ...cached,
-    cover:cover||cached.cover,
-    summary:summary||cached.summary
+    // 确认封面控件已渲染但没有预览时才认定用户清空；控件缺失仍回退草稿缓存。
+    cover:cover??(coverControl?'':cached.cover),
+    summary:summary??cached.summary
   };
 }
 

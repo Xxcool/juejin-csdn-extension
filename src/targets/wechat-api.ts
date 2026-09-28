@@ -4,6 +4,7 @@ import {mapConcurrent,retry} from '../core/async';
 import {SyncError} from '../core/diagnostic';
 import {downloadImageBlob,extractSummary,imageExtension,stripJuejinImageParams} from './csdn-api';
 import {collectWechatImageUrls,compileWechatHtml,replaceWechatImageUrls} from './wechat-content';
+import {renderAllMermaidBlocks} from '../core/mermaid-render';
 
 const HOME='https://mp.weixin.qq.com/';
 type WechatMeta={token:string;ticket:string;userName:string;nickName:string;svrTime:number};
@@ -104,11 +105,13 @@ export async function saveWechatDraft(article:Article,options:SaveOptions={}){
   options.onPreparing?.();
   let html:string;
   try{
-    html=compileWechatHtml(article.markdown);
+    const mermaidImages=await renderAllMermaidBlocks(article.markdown);
+    html=compileWechatHtml(article.markdown,{mermaidImages});
   }catch(error){
     throw new SyncError(`微信文章排版编译失败：${(error as Error).message}`,'content','content');
   }
   const sources=collectWechatImageUrls(html).filter(src=>{
+    if(src.startsWith('data:image/'))return true;
     try{const url=new URL(src);if(!['http:','https:'].includes(url.protocol))throw new Error();return !/(?:^|\.)mmbiz\.qpic\.cn$/i.test(url.hostname);}
     catch{throw new SyncError('正文包含无法转存的图片地址，请使用完整 HTTP(S) 图片地址','content','images');}
   });
@@ -136,11 +139,21 @@ export async function saveWechatDraft(article:Article,options:SaveOptions={}){
   }catch{
     throw new SyncError('无法确认微信草稿是否已保存，请先检查公众号草稿箱，不要直接重复同步','interrupted','draft');
   }
+  // 微信特定错误响应精细化识别
+  if(result.base_resp?.ret===200003||result.base_resp?.ret===-6){
+    throw new SyncError(`微信公众平台登录已过期 (错误码 ${result.base_resp.ret})，请重新登录公众号后台后重试`,'login','authentication');
+  }
+  if(result.base_resp?.ret===200013){
+    throw new SyncError('微信公众平台请求过于频繁 (错误码 200013)，请稍后重试','rate-limit','draft');
+  }
   // 更新失败绝不隐式转为新建；不认识的响应也不能借旧 ID 冒充保存成功。
   if(response.ok&&result.base_resp?.ret===undefined&&!result.appMsgId)throw new SyncError('微信保存响应缺少结果，无法确认是否已保存，请先检查草稿箱','interrupted','draft');
   const finalAppMsgId=result.appMsgId||options.appMsgId;
   if(response.ok&&result.base_resp?.ret===0&&!finalAppMsgId)throw new SyncError('微信返回成功但缺少草稿标识，请先检查草稿箱确认保存结果','interrupted','draft');
-  if(!response.ok||!finalAppMsgId||(result.base_resp?.ret!==undefined&&result.base_resp.ret!==0))throw new SyncError(`保存微信草稿失败：${result.base_resp?.err_msg||result.errmsg||response.status}`,'platform-change','draft');
+  if(!response.ok||!finalAppMsgId||(result.base_resp?.ret!==undefined&&result.base_resp.ret!==0)){
+    const errorDetail=result.base_resp?.err_msg||(result.base_resp?.ret!==undefined?`错误码 (${result.base_resp.ret})`:'')||result.errmsg||(response.ok?'操作未成功':String(response.status));
+    throw new SyncError(`保存微信草稿失败：${errorDetail}`,'platform-change','draft');
+  }
   const draftUrl=`${HOME}cgi-bin/appmsg?t=media/appmsg_edit&action=edit&type=77&appmsgid=${finalAppMsgId}&token=${writeMeta.token}&lang=zh_CN`;
   return{draftUrl,articleId:String(finalAppMsgId),warnings:[] as string[],stats:{imageTotal,imageSucceeded:uploaded.length+(article.cover?1:0),imageFailed:0}};
 }

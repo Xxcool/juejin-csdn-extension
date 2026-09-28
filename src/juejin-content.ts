@@ -457,19 +457,33 @@ function injectPublishIntegration(){
 }
 
 function handleJuejinPublishStart(){
-  if(!isExtensionAlive()||!publishSelected.size)return;
+  if(!isExtensionAlive()){
+    console.warn('[文章摆渡] 扩展上下文已失效，请刷新页面');
+    return;
+  }
+  if(!publishSelected.size){
+    console.log('[文章摆渡] 掘金发布开始，但未勾选同步目标平台');
+    return;
+  }
   const raw=document.documentElement.getAttribute(PUBLISH_ATTRIBUTE);
   if(!raw)return;
   let requestId:string;
   try{requestId=JSON.parse(raw).requestId;}catch{return;}
   if(!requestId||pendingPublishes.has(requestId))return;
   const pending:PendingPublish={platforms:[...publishSelected],auths:publishAuths.map(auth=>({...auth})),panel:publishPanel,selection:publishSelected};
-  try{pending.article=readEditorArticle();}catch(error){pending.error=(error as Error).message;}
+  try{
+    pending.article=readEditorArticle();
+    console.log('[文章摆渡] 已记录发布前文章快照:',pending.article.title,'目标平台:',pending.platforms);
+  }catch(error){
+    pending.error=(error as Error).message;
+    console.warn('[文章摆渡] 捕获文章快照失败:',pending.error);
+  }
   pendingPublishes.set(requestId,pending);
 }
 
 function handleJuejinPublished(){
   if(!isExtensionAlive()){
+    console.warn('[文章摆渡] 扩展上下文已失效，请刷新页面');
     teardownContentScript();
     return;
   }
@@ -480,7 +494,12 @@ function handleJuejinPublished(){
   try{published=JSON.parse(raw) as typeof published;}catch{return;}
   const pending=pendingPublishes.get(published.requestId);
   pendingPublishes.delete(published.requestId);
-  if(!pending||!published.draftId||!published.articleId)return;
+  if(!pending)return;
+  if(!published.draftId||!published.articleId){
+    console.warn('[文章摆渡] 掘金发布未识别到有效的草稿或文章标识:',published);
+    return;
+  }
+  console.log('[文章摆渡] 掘金发布成功，触发多平台同步:',{published,platforms:pending.platforms});
   const {platforms,auths}=pending;
   // 只消费对应请求的选择，不能清空用户新打开面板中的选择。
   if(publishPanel===pending.panel&&publishSelected===pending.selection){
@@ -491,7 +510,9 @@ function handleJuejinPublished(){
   try{
     const snapshot=pending.article;
     if(!snapshot)throw new Error(pending.error||'无法读取发布前的文章快照');
-    if(snapshot.sourceDraftId&&snapshot.sourceDraftId!==published.draftId)throw new Error('发布响应与提交草稿不一致，已取消多平台同步');
+    if(snapshot.sourceDraftId&&published.draftId&&/^\d+$/.test(snapshot.sourceDraftId)&&/^\d+$/.test(published.draftId)&&snapshot.sourceDraftId!==published.draftId){
+      throw new Error('发布响应与提交草稿不一致，已取消多平台同步');
+    }
     const article={...snapshot,id:published.articleId,sourceDraftId:published.draftId,sourceUrl:`https://juejin.cn/post/${published.articleId}`};
     const requests=platforms.map(async platform=>{
       const wechatAccountId=platform==='wechat'?auths.find(item=>item.platform===platform)?.accountId:undefined;
@@ -616,10 +637,17 @@ async function resumePendingHistory(){
       if(result?.message)alert(`文章摆渡：${result.message}`);
       return;
     }
-    if(result.resumed){
-      const state=syncReplyState(result);
-      if(state.saved)rememberSynced(String(result.articleId),result.platform||'csdn');
-      else alert(`文章摆渡：${state.message}`);
+    if(result.resumed||result.errors?.length){
+      const notices:string[]=[];
+      const completed=(result.results||[]) as {articleId:string;platform:PlatformId;task:SyncTask}[];
+      const errors=(result.errors||[]) as {articleId:string;platform:PlatformId;message:string}[];
+      for(const resumed of completed){
+        const state=syncReplyState({ok:true,task:resumed.task});
+        if(state.saved)rememberSynced(String(resumed.articleId),resumed.platform);
+        else notices.push(`• ${PLATFORM_META[resumed.platform].name}：${state.message}`);
+      }
+      for(const error of errors)notices.push(`• ${PLATFORM_META[error.platform].name}：${error.message}`);
+      if(notices.length)alert(`文章摆渡：\n${notices.join('\n')}`);
       syncedIds=undefined;
       void markSyncedButtons();
     }

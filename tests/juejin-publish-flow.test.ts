@@ -14,7 +14,7 @@ const contentCode=bundle('juejin-content.ts',`
     select:(platform)=>publishSelected.add(platform),
     state:()=>({selected:[...publishSelected],auths:publishAuths,pending:pendingPublishes.size})};
 `);
-const pageCode=bundle('juejin-page.ts');
+const pageCode=bundle('juejin-page.ts','\nglobalThis.readSnapshotForTest=editorSnapshot;');
 const attr='data-article-ferry-published';
 const snapshotAttr='data-article-ferry-editor';
 const publishUrl='https://api.juejin.cn/content_api/v1/article/publish';
@@ -105,6 +105,24 @@ function pageHarness(){
   return{context,network,events,Xhr};
 }
 describe('发布请求桥接',()=>{
+  it('接口摘要缓存使用 brief_content，表单清空时不恢复旧摘要',async()=>{
+    const h=pageHarness();
+    const reading=h.context.window.fetch('https://api.juejin.cn/content_api/v1/article_draft/detail',{method:'POST'});
+    h.network.resolve(new Response(JSON.stringify({err_no:0,data:{article_draft:{id:'123',brief_content:'缓存摘要'}}})));
+    await reading;
+    expect(h.context.readSnapshotForTest().summary).toBe('缓存摘要');
+    h.context.document.querySelector.mockImplementation((selector:string)=>selector==='.panel .summary textarea'?{value:''}:null);
+    expect(h.context.readSnapshotForTest().summary).toBe('');
+  });
+  it('发布面板清除封面后不恢复草稿缓存中的旧封面',async()=>{
+    const h=pageHarness();
+    const reading=h.context.window.fetch('https://api.juejin.cn/content_api/v1/article_draft/detail',{method:'POST'});
+    h.network.resolve(new Response(JSON.stringify({err_no:0,data:{article_draft:{id:'123',cover_image:'https://example.com/old.png'}}})));
+    await reading;
+    expect(h.context.readSnapshotForTest().cover).toBe('https://example.com/old.png');
+    h.context.document.querySelectorAll.mockImplementation((selector:string)=>selector==='.panel .form-item'?[{querySelector:()=>({textContent:'文章封面'})}]:[]);
+    expect(h.context.readSnapshotForTest().cover).toBe('');
+  });
   it('fetch 在网络完成前发送开始事件，业务成功后带同一请求身份发送结果',async()=>{
     const h=pageHarness();const response=h.context.window.fetch(publishUrl,{method:'POST',body:JSON.stringify({draft_id:'123'})});
     expect(h.events).toEqual([{type:'article-ferry:publish-start',requestId:'1'}]);

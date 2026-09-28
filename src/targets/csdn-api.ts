@@ -66,7 +66,7 @@ export async function checkCsdnAuth(){
   }
 }
 
-export type CsdnArticleState='draft'|'published'|'unknown';
+export type CsdnArticleState='draft'|'published'|'missing'|'unauthorized'|'unknown';
 
 /**
  * 拉取当前登录用户的 CSDN 分类专栏列表。
@@ -93,15 +93,19 @@ export async function fetchCsdnCategories():Promise<{ok:boolean;categories:strin
 
 /**
  * 写入前查询 CSDN 文章当前状态：编辑器加载接口按 pubStatus / status 区分草稿与已发布。
- * 查询失败时返回 unknown（放行更新），避免状态接口波动阻断正常草稿同步。
+ * 只有明确返回草稿或“文章不存在”才继续写入；其他无法确认的状态由后台暂停更新。
  */
 export async function fetchCsdnArticleState(articleId:string):Promise<CsdnArticleState>{
   const path=`/blog-console-api/v3/editor/getArticle?id=${encodeURIComponent(articleId)}`;
   try{
     const response=await fetch(`https://bizapi.csdn.net${path}`,{method:'GET',credentials:'include',headers:await signedHeaders(path,'GET'),signal:AbortSignal.timeout(8000)});
-    if(!response.ok)return'unknown';
-    const result=await response.json() as {code?:number;data?:{status?:number;pubStatus?:string}};
-    if(result.code!==200||!result.data)return'unknown';
+    if(response.status===401)return'unauthorized';
+    if(!response.ok){
+      const detail=await response.text().catch(()=>'');
+      return detail.includes('该文章不存在')?'missing':'unknown';
+    }
+    const result=await response.json() as {code?:number;msg?:string;message?:string;data?:{status?:number;pubStatus?:string}};
+    if(result.code!==200||!result.data)return [result.msg,result.message].some(message=>message?.includes('该文章不存在'))?'missing':'unknown';
     if(typeof result.data.pubStatus==='string'&&result.data.pubStatus)return result.data.pubStatus==='draft'?'draft':'published';
     if(typeof result.data.status==='number')return result.data.status===2?'draft':'published';
     return'unknown';
@@ -250,7 +254,7 @@ export function stripJuejinImageParams(src:string):string{
   }
 }
 
-/** 去掉掘金导出主题元数据，统一为 CSDN 支持的 Markdown 围栏，并转译掘金特有容器语法。 */
+/** 去掉掘金导出主题元数据，统一为 CSDN 支持的 Markdown 围栏，转译掘金特有容器语法。 */
 export function normalizeMarkdown(source:string){
   let markdown=source.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n');
   const frontmatter=markdown.match(/^---[ \t]*\n([\s\S]*?)\n---[ \t]*(?:\n|$)/);
@@ -262,10 +266,31 @@ export function normalizeMarkdown(source:string){
 }
 
 export function imageExtension(src:string,blob:Blob){
-  const pathExtension=src.match(/\.([a-zA-Z0-9]+)(?:[?#]|$)/)?.[1]?.toLowerCase();
-  if(pathExtension&&['jpg','jpeg','png','gif','webp'].includes(pathExtension))return pathExtension;
+  if(!src.startsWith('data:')){
+    const pathExtension=src.match(/\.([a-zA-Z0-9]+)(?:[?#]|$)/)?.[1]?.toLowerCase();
+    if(pathExtension&&['jpg','jpeg','png','gif','webp'].includes(pathExtension))return pathExtension;
+  }
   const mimeExtension:Record<string,string>={'image/jpeg':'jpg','image/png':'png','image/gif':'gif','image/webp':'webp'};
   return mimeExtension[blob.type.toLowerCase()]||'jpg';
+}
+
+export function dataUrlToBlob(dataUrl:string):Blob{
+  const commaIndex=dataUrl.indexOf(',');
+  if(commaIndex===-1)throw new SyncError('无效的 Data URL 图片数据','content','images');
+  const meta=dataUrl.slice(0,commaIndex);
+  const rawData=dataUrl.slice(commaIndex+1);
+  const mime=meta.match(/data:([^;]+)/)?.[1]||'image/png';
+  const isBase64=meta.includes(';base64');
+  if(isBase64){
+    const binStr=atob(rawData);
+    const len=binStr.length;
+    const bytes=new Uint8Array(len);
+    for(let i=0;i<len;i++)bytes[i]=binStr.charCodeAt(i);
+    return new Blob([bytes],{type:mime});
+  }else{
+    const decoded=decodeURIComponent(rawData);
+    return new Blob([decoded],{type:mime});
+  }
 }
 
 /** 尝试通过已打开的掘金页面标签（Content Script）在第一方登录态上下文中代为下载图片。 */
@@ -295,6 +320,7 @@ async function downloadImageViaPage(src:string):Promise<Blob|null>{
 }
 
 export async function downloadImageBlob(src:string):Promise<Blob>{
+  if(src.startsWith('data:'))return dataUrlToBlob(src);
   const targetUrl=src.replace(/&amp;/g,'&');
   const isPrivate=isJuejinPrivateImage(targetUrl);
   // 掘金私有 CDN 的签名链接仍需当前登录会话；其他外链图片不携带站点凭据。
@@ -361,12 +387,69 @@ async function uploadImageToCsdn(src:string){
   return uploadResult.data.imageUrl;
 }
 
-export function collectExternalImages(markdown:string){
-  const urls=new Set<string>();
+type ImageReference={src:string;start:number;end:number};
+
+/** 仅定位实际图片标签的地址，代码围栏、缩进代码、行内代码与 HTML code/pre 内的示例不参与转存。 */
+function imageReferences(markdown:string):ImageReference[]{
+  const hidden=markdown.split('');
+  const mask=(start:number,end:number)=>{for(let i=start;i<end;i++)if(hidden[i]!=='\n')hidden[i]=' ';};
+  let fence:{marker:string;length:number}|undefined;
+  let listContentIndent:number|undefined;
+  let offset=0;
+  for(const line of markdown.match(/[^\n]*(?:\n|$)/g)||[]){
+    if(!line)continue;
+    const listItem=line.match(/^( *)(?:[-*+]|\d+[.)]) +/);
+    if(listItem)listContentIndent=listItem[0].length;
+    else if(line.trim()&&listContentIndent!==undefined&&line.match(/^ */)![0].length<listContentIndent)listContentIndent=undefined;
+    const marker=line.match(/^ {0,7}(?:>\s*)*(`{3,}|~{3,})/);
+    if(fence){
+      mask(offset,offset+line.length);
+      if(marker&&marker[1][0]===fence.marker&&marker[1].length>=fence.length&&/^\s*$/.test(line.slice(marker[0].length)))fence=undefined;
+    }else if(marker){
+      fence={marker:marker[1][0],length:marker[1].length};
+      mask(offset,offset+line.length);
+    }else if(/^(?: {4,}|\t)/.test(line)&&!(listContentIndent!==undefined&&line.match(/^ */)![0].length<listContentIndent+4))mask(offset,offset+line.length);
+    offset+=line.length;
+  }
+  for(const match of markdown.matchAll(/<(?:pre|code)\b[^>]*>[\s\S]*?<\/(?:pre|code)>/gi))mask(match.index!,match.index!+match[0].length);
+  // 只有存在闭合反引号时才视为代码跨度；未闭合的反引号仍是普通文本。
+  for(let i=0;i<hidden.length;){
+    if(hidden[i]!== '`'){i++;continue;}
+    let length=1;while(hidden[i+length]==='`')length++;
+    let close=-1;
+    for(let j=i+length;j<hidden.length;j++){
+      if(hidden[j]!=='`')continue;
+      let closeLength=1;while(hidden[j+closeLength]==='`')closeLength++;
+      if(closeLength===length){close=j;break;}
+      j+=closeLength-1;
+    }
+    if(close<0){i+=length;continue;}
+    mask(i,close+length);
+    i=close+length;
+  }
+  const visible=hidden.join('');
+  const references:ImageReference[]=[];
   const markdownImage=/!\[[^\]]*\]\(\s*(?:<([^>]+)>|([^\s)]+))/g;
   const htmlImage=/<img\b[^>]*\bsrc=["']([^"']+)["']/gi;
-  for(const match of markdown.matchAll(markdownImage))urls.add(match[1]||match[2]);
-  for(const match of markdown.matchAll(htmlImage))urls.add(match[1]);
+  for(const match of visible.matchAll(markdownImage)){
+    let slashCount=0;for(let i=match.index!-1;i>=0&&visible[i]==='\\';i--)slashCount++;
+    if(slashCount%2)continue;
+    const src=match[1]||match[2];
+    const start=match.index!+match[0].lastIndexOf(src);
+    references.push({src,start,end:start+src.length});
+  }
+  for(const match of visible.matchAll(htmlImage)){
+    let slashCount=0;for(let i=match.index!-1;i>=0&&visible[i]==='\\';i--)slashCount++;
+    if(slashCount%2)continue;
+    const src=match[1];
+    const start=match.index!+match[0].lastIndexOf(src);
+    references.push({src,start,end:start+src.length});
+  }
+  return references.sort((a,b)=>a.start-b.start);
+}
+
+export function collectExternalImages(markdown:string){
+  const urls=new Set(imageReferences(markdown).map(item=>item.src));
   return[...urls].filter(src=>{
     try{
       const url=new URL(src);
@@ -376,7 +459,7 @@ export function collectExternalImages(markdown:string){
 }
 
 /** CSDN 无法稳定读取掘金 CDN，保存前将正文和封面图片转存到 CSDN。 */
-type SaveDraftOptions={articleId?:string;categories?:string[];syncCover?:boolean;autoSummary?:boolean;appendSourceLink?:boolean;imageFailurePolicy?:ImageFailurePolicy;onPreparing?:()=>void|Promise<void>;onProgress?:(progress:TaskProgress)=>void|Promise<void>;onSaving?:()=>void|Promise<void>};
+type SaveDraftOptions={articleId?:string;categories?:string[];syncCover?:boolean;autoSummary?:boolean;appendSourceLink?:boolean;imageFailurePolicy?:ImageFailurePolicy;onPreparing?:()=>void|Promise<void>;onProgress?:(progress:TaskProgress)=>void|Promise<void>;onSaving?:()=>void|Promise<void>;onDowngradeToCreate?:()=>void|Promise<void>};
 type ImageTransfer={src:string;target?:string;error?:string;errorCategory?:TaskErrorCategory};
 
 export function summarizeImageTransfers(transfers:ImageTransfer[]){
@@ -390,9 +473,14 @@ export function enforceImageFailurePolicy(transfers:ImageTransfer[],policy:Image
 
 export function applyImageTransfers(markdown:string,cover:string|undefined,transfers:ImageTransfer[]){
   const replacements=new Map(transfers.filter(item=>item.target).map(item=>[item.src,item.target!]));
-  for(const [src,target] of replacements)markdown=markdown.split(src).join(target);
+  const references=imageReferences(markdown);
+  const bodyImages=new Set(references.map(reference=>reference.src));
+  for(const reference of references.reverse()){
+    const target=replacements.get(reference.src);
+    if(target)markdown=markdown.slice(0,reference.start)+target+markdown.slice(reference.end);
+  }
   const warnings=transfers.filter(item=>item.error).map(item=>{
-    const location=cover===item.src&&!markdown.includes(item.src)?'封面':'正文图片';
+    const location=cover===item.src&&!bodyImages.has(item.src)?'封面':'正文图片';
     const action=location==='封面'?'已忽略':'已保留原链接';
     return`${location}转存失败，${action}：${item.src}（${item.error}）`;
   });
@@ -444,18 +532,32 @@ export async function saveDraftViaApi(article:Article,options:SaveDraftOptions={
   const preparedResult=prepared??await prepareArticle(article,options);
   const body=buildSaveArticleBody(article,preparedResult,options.articleId,options.categories,options.autoSummary!==false);
   await options.onSaving?.();
-  const response=await fetch(API,{method:'POST',credentials:'include',headers:await signedHeaders('/blog-console-api/v3/mdeditor/saveArticle','POST'),body:JSON.stringify(body)});
+  let response:Response;
+  try{
+    response=await fetch(API,{method:'POST',credentials:'include',signal:AbortSignal.timeout(30000),headers:await signedHeaders('/blog-console-api/v3/mdeditor/saveArticle','POST'),body:JSON.stringify(body)});
+  }catch{
+    // 请求可能已经到达 CSDN；不能把没有收到响应等同于“没有创建草稿”。
+    throw new SyncError('无法确认 CSDN 草稿是否已保存，请先检查草稿箱，再决定是否重试','interrupted','draft');
+  }
   if(!response.ok){
     const text=await response.text().catch(()=>'');
     // 更新模式下 CSDN 返回 400「该文章不存在」（草稿已被用户在 CSDN 删除等）：自动降级为新建草稿，避免任务因旧 articleId 永久卡死。
-    if(response.status===400&&options.articleId&&text.includes('该文章不存在'))return saveDraftViaApi(article,{...options,articleId:undefined},preparedResult);
+    if(response.status===400&&options.articleId&&text.includes('该文章不存在')){
+      await options.onDowngradeToCreate?.();
+      return saveDraftViaApi(article,{...options,articleId:undefined},preparedResult);
+    }
     throw new SyncError('CSDN API 请求失败 ('+response.status+')'+(text?': '+text.slice(0,120):''),statusErrorCategory(response.status)??'platform-change','draft');
   }
-  const result=await response.json() as {code?:number;msg?:string;message?:string;data?:{id?:string;article_id?:string;url?:string}};
-  if(result.code!==200&&result.code!==0)throw new SyncError(result.msg||result.message||'CSDN 返回错误码 '+result.code,'platform-change','draft');
+  let result:{code?:number;msg?:string;message?:string;data?:{id?:string;article_id?:string;url?:string}};
+  try{result=await response.json();if(!result||typeof result!=='object')throw new Error('invalid response');}
+  catch{throw new SyncError('CSDN 已响应保存请求，但结果无法解析，请先检查草稿箱','interrupted','draft');}
+  if(result.code!==200&&result.code!==0){
+    if(typeof result.code!=='number')throw new SyncError('CSDN 保存响应缺少结果码，请先检查草稿箱确认结果','interrupted','draft');
+    throw new SyncError(result.msg||result.message||'CSDN 返回错误码 '+result.code,'platform-change','draft');
+  }
   const articleId=result.data?.id||result.data?.article_id;
   const draftUrl=result.data?.url||(articleId?'https://editor.csdn.net/md/?articleId='+articleId:'');
-  if(!draftUrl||!articleId)throw new SyncError('CSDN 已保存草稿，但没有返回草稿标识','platform-change','draft');
+  if(!draftUrl||!articleId)throw new SyncError('CSDN 保存响应缺少草稿标识，请先检查草稿箱确认结果','interrupted','draft');
   return{draftUrl,articleId:String(articleId),warnings:preparedResult.warnings,stats:preparedResult.stats};
 }
 

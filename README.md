@@ -48,7 +48,7 @@
 
 ### 📦 下载 Release 安装包（推荐）
 
-1. 📥 前往 [Releases 页面](https://github.com/Xxcool/juejin-csdn-extension/releases/latest) 下载最新版 `article-ferry-v1.1.1.zip` 并解压。
+1. 📥 前往 [Releases 页面](https://github.com/Xxcool/juejin-csdn-extension/releases/latest) 下载最新版 `article-ferry-v1.2.0.zip` 并解压。
 2. 🌐 打开 Chrome 浏览器，访问 `chrome://extensions/`，开启右上角的 **“开发者模式”**。
 3. 📂 点击 **“加载已解压的扩展程序”**，选择解压出的目录。
 4. 🔑 在同一 Chrome 配置文件中登录掘金和需要同步的目标平台。
@@ -99,7 +99,7 @@ npm run build
 - ❌ **失败或需处理**：按诊断提示处理登录、图片或平台接口问题。
 - ⚠️ **保存结果不确定**：先查看目标草稿箱。此类任务不参加批量重试，单条重试需二次确认，以免重复创建。
 
-> 🛡️ 再次同步可能覆盖对应草稿的手工修改，建议开启“更新草稿前确认”。删除或清空本地同步记录不会删除目标平台草稿，并会妥善保留已有草稿映射。
+> 🛡️ 再次同步可能覆盖对应草稿的手工修改，建议开启“更新草稿前确认”。CSDN 无法确认文章仍是草稿时会暂停更新；明确已删除的旧草稿会另存新草稿。删除或清空本地同步记录不会删除目标平台草稿；清空操作需等待进行中的任务结束。
 
 ---
 
@@ -158,14 +158,14 @@ npm run build
 | ⚡ 命令 | 🎯 用途 |
 | --- | --- |
 | `npm run check` | TypeScript 类型检查 |
-| `npm test` | 自动化回归测试（100 项） |
+| `npm test` | 自动化回归测试（170 项） |
 | `npm run build` | 本地构建至 `dist/`，包含 source map |
 | `npm run dev` | 监听源码变动并实时重构 |
 | `npm run build:release` | 生产环境无 source map 纯净构建 |
 | `npm run release:zip` | 严格检查、跑测、生产构建并打包 ZIP |
 | `npm run release:notes` | 从 CHANGELOG 智能提取版本说明 |
 
-当前版本通过 **100 项自动化测试**，覆盖微信会话、内容转换、图片封面、账号隔离、异常写入、发布成功识别、请求快照、登录刷新竞态和弹窗状态等核心场景。
+当前版本通过 **170 项自动化测试**，覆盖微信会话、内容转换、图片封面、账号隔离、异常写入、发布成功识别、请求快照、登录刷新竞态和弹窗状态等核心场景。
 
 ---
 

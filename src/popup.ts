@@ -2,7 +2,7 @@
 import type {ExtensionSettings,SyncTask,TaskStatus} from './types';
 import {categoryLabels,stageLabels} from './core/diagnostic';
 import {defaultSettings,formatCategoryMappings,normalizeSettings,parseCategoryMappings} from './core/settings';
-import {isRetryableTask} from './core/task';
+import {isActiveTask,isRetryableTask} from './core/task';
 
 const $=<T extends HTMLElement>(selector:string)=>document.querySelector<T>(selector)!;
 type LoginStatus='checking'|'logged-in'|'logged-out'|'error';
@@ -242,7 +242,8 @@ async function loadTasks(){
     const badge=$('#history-badge');
     badge.textContent=all.length?String(all.length):'';
     const clearButton=$<HTMLButtonElement>('#history-clear');
-    clearButton.disabled=!all.length;
+    clearButton.disabled=!all.length||all.some(isActiveTask);
+    clearButton.title=all.some(isActiveTask)?'仍有文章正在同步，请等待完成后再清空历史':'';
     $<HTMLButtonElement>('#history-retry-all').disabled=!all.some(isRetryableTask);
     if(!tasks.length){
       list.innerHTML=`<div class="empty-state-view harbor-empty-view">
@@ -325,10 +326,10 @@ async function loadTasks(){
       setTimeout(()=>void loadTasks(),500);
     }));
     list.querySelectorAll<HTMLButtonElement>('[data-delete]').forEach(button=>button.addEventListener('click',async()=>{
-      if(!confirm('确定删除这条本地同步记录吗？此操作不会删除 CSDN 草稿。'))return;
-      const result=await chrome.runtime.sendMessage({type:'DELETE_TASK',id:button.dataset.delete});
+      if(!confirm('确定删除这条本地同步记录吗？此操作不会删除远端草稿。'))return;
+      const result=await chrome.runtime.sendMessage({type:'DELETE_TASK',id:button.dataset.delete,removeMapping:true});
       if(!result?.ok)toast(result?.message||'删除失败');
-      else{toast('本地记录已删除');await loadTasks();}
+      else{toast('本地记录及关联已删除');await loadTasks();}
     }));
   }catch(error){toast((error as Error).message);}
 }
@@ -492,7 +493,7 @@ $<HTMLButtonElement>('#history-retry-all').addEventListener('click',async()=>{
 });
 
 $<HTMLButtonElement>('#history-clear').addEventListener('click',async()=>{
-  if(!confirm('确定清空全部同步历史吗？此操作不会删除 CSDN 草稿。'))return;
+  if(!confirm('确定清空全部同步历史吗？此操作不会删除目标平台草稿。'))return;
   const result=await chrome.runtime.sendMessage({type:'CLEAR_TASKS'});
   if(!result?.ok){toast(result?.message||'清空失败');return;}
   toast('同步历史已清空');

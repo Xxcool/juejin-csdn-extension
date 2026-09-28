@@ -1,7 +1,7 @@
 // 核心同步逻辑回归测试：覆盖任务去重、异步重试、并发上限和 CSDN 请求契约。
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {Semaphore,mapConcurrent,retry} from '../src/core/async';
-import {deleteTask,getArticleDraftMapping,getDraftMapping,migrateStoredTasks,saveArticleDraftMapping,toStorageTask,uniqueTasks} from '../src/core/store';
+import {clearAllTasks,deleteTask,getArticleDraftMapping,getDraftMapping,migrateStoredTasks,saveArticleDraftMapping,toStorageTask,uniqueTasks} from '../src/core/store';
 import {articleIdentityKeys,canDeleteTask,extractCsdnArticleId,findMatchingTask,isActiveTask,isInterruptedTask,isRetryableTask,isUncertainCreateTask} from '../src/core/task';
 import {SyncError,classifySyncError} from '../src/core/diagnostic';
 import {isSupportedMessage} from '../src/core/message';
@@ -101,6 +101,17 @@ describe('任务历史',()=>{
     await expect(getDraftMapping(article.id,'wechat')).resolves.toMatchObject({wechatAppMsgId:'wx-999',draftUrl:wechatTask.draftUrl});
     await expect(getArticleDraftMapping(article,'wechat')).resolves.toMatchObject({wechatAppMsgId:'wx-999'});
   });
+
+  it('存在正在同步的任务时拒绝清空，任务完成后才允许清空',async()=>{
+    const active:SyncTask={id:'active',article,platform:'csdn',status:'writing',createdAt:'2026-09-01T00:00:00Z',updatedAt:'2026-09-01T00:00:00Z',attempts:1};
+    const storage:Record<string,unknown>={syncTasks:[active]};
+    vi.stubGlobal('chrome',{storage:{local:{get:async(key:string)=>({[key]:storage[key]}),set:async(value:Record<string,unknown>)=>Object.assign(storage,value)}}});
+    await expect(clearAllTasks()).rejects.toThrow('仍有文章正在同步');
+    expect(storage.syncTasks).toEqual([active]);
+    storage.syncTasks=[{...active,status:'saved'}];
+    await expect(clearAllTasks()).resolves.toBeUndefined();
+    expect(storage.syncTasks).toEqual([]);
+  });
 });
 
 describe('同步设置',()=>{
@@ -165,6 +176,28 @@ describe('CSDN 内容与保存契约',()=>{
   it('收集 Markdown 与 HTML 外链图片并排除 CSDN 图片',()=>{
     const markdown='![a](https://img.example.com/a.png)\n<img src="https://img.example.com/b.webp">\n![](https://img-blog.csdnimg.cn/c.png)';
     expect(collectExternalImages(markdown)).toEqual(['https://img.example.com/a.png','https://img.example.com/b.webp']);
+  });
+
+  it('图片转存不扫描或改动代码示例、普通链接及纯文本',()=>{
+    const src='https://img.example.com/a.png';
+    const markdown=`\`![行内](${src})\`\n\n\`\`\`md\n![围栏](${src})\n<img src="${src}">\n\`\`\`\n\n    ![缩进代码](${src})\n\n![正文](${src})\n\n[普通链接](${src})\n\n纯文本 ${src}`;
+    expect(collectExternalImages(markdown)).toEqual([src]);
+    const result=applyImageTransfers(markdown,undefined,[{src,target:'https://img-blog.csdnimg.cn/uploaded.png'}]);
+    expect(result.markdown).toContain(`\`![行内](${src})\``);
+    expect(result.markdown).toContain(`![围栏](${src})`);
+    expect(result.markdown).toContain(`![缩进代码](${src})`);
+    expect(result.markdown).toContain('![正文](https://img-blog.csdnimg.cn/uploaded.png)');
+    expect(result.markdown).toContain(`[普通链接](${src})`);
+    expect(result.markdown).toContain(`纯文本 ${src}`);
+  });
+  it('列表里的正文图片仍需转存，引用中的围栏代码与转义图片不转存',()=>{
+    const actual='https://img.example.com/actual.png';
+    const code='https://img.example.com/code.png';
+    const markdown=`- 条目\n\n    ![列表图片](${actual})\n\n> \`\`\`md\n> ![示例](${code})\n> \`\`\`\n\n\\![转义](${code})`;
+    expect(collectExternalImages(markdown)).toEqual([actual]);
+    const result=applyImageTransfers(markdown,undefined,[{src:actual,target:'https://img-blog.csdnimg.cn/actual.png'}]);
+    expect(result.markdown).toContain('![列表图片](https://img-blog.csdnimg.cn/actual.png)');
+    expect(result.markdown).toContain(`![示例](${code})`);
   });
 
   it('根据地址或 MIME 识别图片扩展名',()=>{
@@ -257,7 +290,7 @@ describe('v0.5.1 底座加固',()=>{
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({draft_id:'draft-9'});
   });
 
-  it('按 pubStatus 与 status 识别已发布文章，接口异常时放行更新',async()=>{
+  it('按 pubStatus 与 status 识别已发布文章，接口异常时返回 unknown',async()=>{
     const respond=(data:unknown,status=200)=>vi.fn().mockResolvedValue(new Response(JSON.stringify(data),{status}));
     vi.stubGlobal('fetch',respond({code:200,data:{pubStatus:'published'}}));
     await expect(fetchCsdnArticleState('1')).resolves.toBe('published');
@@ -271,6 +304,22 @@ describe('v0.5.1 底座加固',()=>{
     await expect(fetchCsdnArticleState('1')).resolves.toBe('unknown');
     vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response('',{status:403})));
     await expect(fetchCsdnArticleState('1')).resolves.toBe('unknown');
+    vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response('',{status:401})));
+    await expect(fetchCsdnArticleState('1')).resolves.toBe('unauthorized');
+    vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response('该文章不存在',{status:404})));
+    await expect(fetchCsdnArticleState('1')).resolves.toBe('missing');
+  });
+
+  it.each(['network','invalid-json','missing-code','missing-id'])('CSDN 新建响应 %s 时标记为写入结果不确定',async kind=>{
+    vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
+      const url=String(input);
+      if(url.includes('getBaseInfo'))return Response.json({code:200,data:{name:'tester'}});
+      if(kind==='network')throw new TypeError('Failed to fetch');
+      if(kind==='invalid-json')return new Response('<html>',{status:200});
+      if(kind==='missing-code')return Response.json({data:{id:'created-but-unclear'}});
+      return Response.json({code:200,data:{}});
+    }));
+    await expect(saveDraftViaApi({...article,title:'足够长的同步标题',markdown:'这是长度超过二十个字符的完整正文内容，用于验证写入结果不确定。'},{appendSourceLink:false})).rejects.toMatchObject({category:'interrupted',stage:'draft'});
   });
 
   it('图片上传凭证 5xx 按 abort 策略终止时归类为网络异常',async()=>{

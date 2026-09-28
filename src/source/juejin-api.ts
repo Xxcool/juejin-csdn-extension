@@ -5,8 +5,8 @@ import {SyncError} from '../core/diagnostic';
 const API_BASE='https://api.juejin.cn/content_api/v1';
 
 type ApiResponse<T>={err_no:number;err_msg:string;data:T};
-type ArticleListItem={article_info?:{article_id?:string;draft_id?:string;title?:string;cover_image?:string};tags?:{tag_name?:string}[]};
-type DraftDetail={article_draft?:{id?:string;title?:string;mark_content?:string;brief?:string;cover_image?:string;tags?:{tag_name?:string}[]}};
+type ArticleListItem={article_info?:{article_id?:string;draft_id?:string;title?:string;brief_content?:string;cover_image?:string};tags?:{tag_name?:string}[]};
+type DraftDetail={article_draft?:{id?:string;title?:string;mark_content?:string;brief_content?:string;cover_image?:string;tags?:{tag_name?:string}[]}};
 
 async function post<T>(path:string,body:unknown,uuid:string):Promise<T>{
   if(!uuid)throw new SyncError('无法读取掘金请求标识，请刷新文章列表后重试','platform-change','content');
@@ -32,8 +32,8 @@ async function fetchDraftContent(draftId:string,uuid:string){
   const draft=detail.article_draft;
   const markdown=draft?.mark_content?.trim()||'';
   if(markdown.length<20)throw new SyncError('掘金草稿正文为空或过短','content','content');
-  // brief 为作者在掘金发布面板手填的文章摘要；缺失时交由 CSDN 侧自动提取兜底。
-  const summary=draft?.brief?.trim()||undefined;
+  // brief_content 为作者在掘金发布面板手填的文章摘要；缺失时交由 CSDN 侧自动提取兜底。
+  const summary=draft?.brief_content?.trim();
   // 空字符串是已确认无封面，不能再用文章列表里的旧封面覆盖。
   return{title:draft?.title?.trim()||'',markdown,summary,tags:(draft?.tags||[]).map(tag=>tag.tag_name||'').filter(Boolean),cover:draft?.cover_image};
 }
@@ -75,7 +75,8 @@ export async function fetchJuejinDraftByArticleId(articleId:string,uuid:string,t
     sourceDraftId:String(draftId),
     title:content.title||entry?.article_info?.title?.trim()||titleFallback,
     markdown:content.markdown,
-    summary:content.summary,
+    // 草稿明确清空时保留空值；仅未返回摘要时使用已发布文章摘要。
+    summary:content.summary??entry?.article_info?.brief_content?.trim(),
     tags:content.tags.length?content.tags:(entry?.tags||[]).map(tag=>tag.tag_name||'').filter(Boolean),
     cover:content.cover??entry?.article_info?.cover_image,
     sourceUrl:`https://juejin.cn/post/${articleId}`

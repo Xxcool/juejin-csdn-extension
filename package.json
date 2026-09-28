@@ -1,6 +1,6 @@
 {
   "name": "juejin-csdn-extension",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "private": true,
   "description": "面向技术创作者的端侧安全内容摆渡中枢 · 一处专注写作，优雅摆渡全网阵地",
   "homepage": "https://artferry.vercel.app",
@@ -28,6 +28,7 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
-    "marked": "^18.0.11"
+    "marked": "^18.0.11",
+    "mermaid": "^11.17.2"
   }
 }
