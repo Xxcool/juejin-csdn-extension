@@ -8,9 +8,11 @@ const $=<T extends HTMLElement>(selector:string)=>document.querySelector<T>(sele
 type LoginStatus='checking'|'logged-in'|'logged-out'|'error';
 let loginStatus:LoginStatus='checking';
 let wechatLoginStatus:LoginStatus='checking';
-let selectedPlatform:'csdn'|'wechat'='csdn';
+let cnblogsLoginStatus:LoginStatus='checking';
+let selectedPlatform:'csdn'|'wechat'|'cnblogs'='csdn';
 let csdnAccount='';
 let wechatAccount='';
+let cnblogsAccount='';
 let checkSequence=0;
 let historyFilter:'all'|'saved'|'failed'|'working'='all';
 let currentSettings:ExtensionSettings=defaultSettings;
@@ -18,9 +20,9 @@ let currentTab:'history'|'settings'='history';
 
 function renderPlatformTrigger(){
   const trigger=$('#platform-trigger');
-  const status=selectedPlatform==='csdn'?loginStatus:wechatLoginStatus;
-  const account=selectedPlatform==='csdn'?csdnAccount:wechatAccount;
-  const name=selectedPlatform==='csdn'?'CSDN':'微信';
+  const status=selectedPlatform==='csdn'?loginStatus:selectedPlatform==='wechat'?wechatLoginStatus:cnblogsLoginStatus;
+  const account=selectedPlatform==='csdn'?csdnAccount:selectedPlatform==='wechat'?wechatAccount:cnblogsAccount;
+  const name=selectedPlatform==='csdn'?'CSDN':selectedPlatform==='wechat'?'微信':'博客园';
   trigger.className=`platform-pill ${status==='logged-in'?'logged':status==='logged-out'?'login-link':status}`;
   $('#platform-trigger-text').textContent=status==='checking'?`${name} 检测中…`:status==='logged-in'?`${name}${account?` · ${account}`:''} ✓`:status==='logged-out'?`${name} 未登录`: `${name} 检测失败`;
 }
@@ -32,7 +34,7 @@ function setPlatformMenu(open:boolean){
   menu.hidden=!open;
 }
 
-function selectPlatform(platform:'csdn'|'wechat'){
+function selectPlatform(platform:'csdn'|'wechat'|'cnblogs'){
   selectedPlatform=platform;
   document.querySelectorAll<HTMLButtonElement>('.platform-option').forEach(option=>{
     const selected=option.dataset.platform===platform;
@@ -133,6 +135,18 @@ async function checkWechatLogin(){
   }catch(error){wechatLoginStatus='error';pill.className='platform-option error'+(selectedPlatform==='wechat'?' selected':'');text.textContent='微信公众号检测失败 · 点击重试';toast((error as Error).message);}finally{renderPlatformTrigger();}
 }
 
+async function checkCnblogsLogin(){
+  const pill=$('#cnblogs-login-state');const text=$('#cnblogs-login-text');
+  cnblogsLoginStatus='checking';pill.className='platform-option checking'+(selectedPlatform==='cnblogs'?' selected':'');text.textContent='博客园检测中…';renderPlatformTrigger();
+  try{
+    const result=await chrome.runtime.sendMessage({type:'CHECK_CNBLOGS_STATUS'});
+    if(result?.loggedIn&&result?.blogEnabled){cnblogsLoginStatus='logged-in';cnblogsAccount=result.account||'';pill.className='platform-option logged'+(selectedPlatform==='cnblogs'?' selected':'');text.textContent=result.account?`博客园 · ${result.account}`:'博客园已登录';pill.title='博客园已登录，点击刷新状态';}
+    else if(result?.loggedIn){cnblogsLoginStatus='error';cnblogsAccount=result.account||'';pill.className='platform-option error'+(selectedPlatform==='cnblogs'?' selected':'');text.textContent='博客园尚未开通 · 点击处理';pill.title=result.message||'博客园账号尚未开通博客';}
+    else if(result?.ok){cnblogsLoginStatus='logged-out';cnblogsAccount='';pill.className='platform-option login-link'+(selectedPlatform==='cnblogs'?' selected':'');text.textContent='博客园未登录 · 点击登录';pill.title='点击登录博客园';}
+    else throw new Error(result?.message||'博客园登录检测失败');
+  }catch(error){cnblogsLoginStatus='error';pill.className='platform-option error'+(selectedPlatform==='cnblogs'?' selected':'');text.textContent='博客园检测失败 · 点击重试';toast((error as Error).message);}finally{renderPlatformTrigger();}
+}
+
 function escapeHtml(value:string){
   return value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]!));
 }
@@ -192,7 +206,7 @@ function taskCard(task:SyncTask){
     </div>
     <div class="task-progress ${task.progress.total?'':'indeterminate'}"><span style="width:${task.progress.total?progressPercent:35}%"></span></div>
   </div>`:'';
-  const platformName=task.platform==='wechat'?'微信公众号':'CSDN';
+  const platformName=task.platform==='wechat'?'微信公众号':task.platform==='cnblogs'?'博客园':'CSDN';
   const bottomStats=stats?`<span>${platformName}</span><i>·</i>${stats}`:`<span>${platformName}草稿同步</span>`;
   return`<div class="history-card ${kind}">
     <div class="task-main-row">
@@ -337,6 +351,7 @@ async function loadTasks(){
 function renderSettings(settings:ExtensionSettings){
   $<HTMLInputElement>('#auto-sync').checked=settings.autoSyncAfterPublish;
   $<HTMLInputElement>('#wechat-auto-sync').checked=settings.wechatAutoSync;
+  $<HTMLInputElement>('#cnblogs-auto-sync').checked=settings.cnblogsAutoSync;
   $<HTMLInputElement>('#sync-cover').checked=settings.syncCover;
   $<HTMLInputElement>('#auto-summary').checked=settings.autoSummary;
   $<HTMLInputElement>('#append-source-link').checked=settings.appendSourceLink;
@@ -350,6 +365,7 @@ async function saveSettingsFromForm(){
   currentSettings=normalizeSettings({
     autoSyncAfterPublish:$<HTMLInputElement>('#auto-sync').checked,
     wechatAutoSync:$<HTMLInputElement>('#wechat-auto-sync').checked,
+    cnblogsAutoSync:$<HTMLInputElement>('#cnblogs-auto-sync').checked,
     syncCover:$<HTMLInputElement>('#sync-cover').checked,
     autoSummary:$<HTMLInputElement>('#auto-summary').checked,
     appendSourceLink:$<HTMLInputElement>('#append-source-link').checked,
@@ -394,7 +410,7 @@ async function checkHealthBanner(){
     const result=await chrome.runtime.sendMessage({type:'GET_HEALTH_STATUS'});
     if(!result?.alert)return;
     const status=result.status;
-    const broken=status?.csdn==='broken'?'CSDN':'掘金';
+    const broken=status?.cnblogs==='broken'?'博客园':status?.wechat==='broken'?'微信公众号':status?.csdn==='broken'?'CSDN':'掘金';
     $('#health-title').textContent=`${broken}接口状态异常`;
     $('#health-message').textContent=status?.message||'平台接口近期变动，同步可能失败';
     banner.hidden=false;
@@ -475,6 +491,12 @@ $('#wechat-login-state').addEventListener('click',()=>{
   if(wechatLoginStatus==='logged-out')void chrome.runtime.sendMessage({type:'OPEN_WECHAT_LOGIN'});
   else if(wechatLoginStatus==='error')void checkWechatLogin();
 });
+$('#cnblogs-login-state').addEventListener('click',()=>{
+  selectPlatform('cnblogs');
+  if(cnblogsLoginStatus==='logged-out')void chrome.runtime.sendMessage({type:'OPEN_CNBLOGS_LOGIN'});
+  else if(cnblogsLoginStatus==='error')void chrome.runtime.sendMessage({type:'OPEN_CNBLOGS_LOGIN'});
+  else void checkCnblogsLogin();
+});
 document.addEventListener('click',event=>{
   if(!(event.target as Element).closest('.platform-switcher'))setPlatformMenu(false);
 });
@@ -500,7 +522,7 @@ $<HTMLButtonElement>('#history-clear').addEventListener('click',async()=>{
   await loadTasks();
 });
 
-['#auto-sync','#wechat-auto-sync','#sync-cover','#auto-summary','#append-source-link','#confirm-update','#image-failure'].forEach(selector=>$(selector).addEventListener('change',()=>void saveSettingsFromForm()));
+['#auto-sync','#wechat-auto-sync','#cnblogs-auto-sync','#sync-cover','#auto-summary','#append-source-link','#confirm-update','#image-failure'].forEach(selector=>$(selector).addEventListener('change',()=>void saveSettingsFromForm()));
 ['#default-category','#category-mappings'].forEach(selector=>$(selector).addEventListener('change',()=>void saveSettingsFromForm()));
 
 $('#health-detail').addEventListener('click',()=>void chrome.tabs.create({url:STATUS_PAGE_URL,active:true}));
@@ -534,4 +556,5 @@ void loadSettings();
 void loadCsdnCategories();
 void checkLogin();
 void checkWechatLogin();
+void checkCnblogsLogin();
 void checkHealthBanner();

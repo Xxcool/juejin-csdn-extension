@@ -735,6 +735,12 @@ main {
   border: 1px solid rgba(7, 169, 79, 0.28);
 }
 
+.platform-badge.cnblogs {
+  background: rgba(46, 122, 204, 0.1);
+  color: #2e7acc;
+  border: 1px solid rgba(46, 122, 204, 0.28);
+}
+
 @media (prefers-color-scheme: dark) {
   .platform-badge.csdn {
     background: rgba(252, 85, 49, 0.18);
@@ -745,6 +751,11 @@ main {
     background: rgba(7, 169, 79, 0.18);
     color: #26d473;
     border-color: rgba(7, 169, 79, 0.35);
+  }
+  .platform-badge.cnblogs {
+    background: rgba(46, 122, 204, 0.2);
+    color: #8dcefc;
+    border-color: rgba(141, 206, 252, 0.38);
   }
 }
 

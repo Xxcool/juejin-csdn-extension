@@ -1,7 +1,7 @@
 // 掘金页面集成：新文章在发布成功后同步，历史文章通过统一弹窗立即同步。
 import type {Article,PlatformId,SyncTask} from './types';
 import {extractArticleId} from './source/juejin-api';
-import {CSDN_LOGO,WECHAT_LOGO} from './targets/logos';
+import {CNBLOGS_LOGO,CSDN_LOGO,WECHAT_LOGO} from './targets/logos';
 import {refreshPlatformSelection,syncReplyState} from './core/sync-dialog';
 
 type EditorSnapshot={title:string;markdown:string;draftId:string;sourceUrl:string;tags?:string[];cover?:string;summary?:string};
@@ -15,10 +15,12 @@ const PUBLISH_ATTRIBUTE='data-article-ferry-published';
 const SYNC_ICON='<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 5.5A5.5 5.5 0 0 0 3.2 4L2 5.5M3 10.5A5.5 5.5 0 0 0 12.8 12l1.2-1.5M2 2.8V5.5h2.7M14 13.2v-2.7h-2.7"/></svg>';
 const PLATFORM_META:Record<PlatformId,{name:string;badge:string;logo:string;check:string;login:string}>={
   csdn:{name:'CSDN',badge:'博客草稿',logo:CSDN_LOGO,check:'CHECK_CSDN_STATUS',login:'OPEN_CSDN_LOGIN'},
-  wechat:{name:'微信公众号',badge:'图文草稿',logo:WECHAT_LOGO,check:'CHECK_WECHAT_STATUS',login:'OPEN_WECHAT_LOGIN'}
+  wechat:{name:'微信公众号',badge:'图文草稿',logo:WECHAT_LOGO,check:'CHECK_WECHAT_STATUS',login:'OPEN_WECHAT_LOGIN'},
+  cnblogs:{name:'博客园',badge:'随笔草稿',logo:CNBLOGS_LOGO,check:'CHECK_CNBLOGS_STATUS',login:'OPEN_CNBLOGS_LOGIN'}
 };
 let autoDefault=true;
 let wechatAutoDefault=true;
+let cnblogsAutoDefault=false;
 let syncedIds:Promise<Set<string>>|undefined;
 let currentDialogRefresh:(()=>Promise<void>)|null=null;
 let currentPublishRefresh:(()=>Promise<void>)|null=null;
@@ -88,7 +90,8 @@ async function checkPlatform(platform:PlatformId):Promise<PlatformAuth>{
     if(!result){
       return{platform,name:meta.name,ok:false,loggedIn:false,message:'扩展已重载，请刷新网页'};
     }
-    return{platform,name:meta.name,ok:result?.ok===true,loggedIn:result?.loggedIn===true,account:result?.account,accountId:result?.accountId,message:result?.message};
+    const loggedIn=result?.loggedIn===true&&(platform!=='cnblogs'||result?.blogEnabled===true);
+    return{platform,name:meta.name,ok:result?.ok===true,loggedIn,account:result?.account,accountId:result?.accountId,message:result?.message};
   }catch(error){
     return{platform,name:meta.name,ok:false,loggedIn:false,message:(error as Error).message};
   }
@@ -190,7 +193,8 @@ async function openSyncDialog(source:SyncSource,trigger:HTMLElement){
 
   let auths:PlatformAuth[]=[
     {platform:'csdn',name:'CSDN',ok:true,loggedIn:false,loading:true},
-    {platform:'wechat',name:'微信公众号',ok:true,loggedIn:false,loading:true}
+    {platform:'wechat',name:'微信公众号',ok:true,loggedIn:false,loading:true},
+    {platform:'cnblogs',name:'博客园',ok:true,loggedIn:false,loading:true}
   ];
   const selected=new Set<PlatformId>();
   // 提交期间冻结选择与刷新；默认勾选仅在首次检测完成时应用。
@@ -259,15 +263,16 @@ async function openSyncDialog(source:SyncSource,trigger:HTMLElement){
     if(!silent){
       auths=[
         {platform:'csdn',name:'CSDN',ok:true,loggedIn:false,loading:true},
-        {platform:'wechat',name:'微信公众号',ok:true,loggedIn:false,loading:true}
+        {platform:'wechat',name:'微信公众号',ok:true,loggedIn:false,loading:true},
+        {platform:'cnblogs',name:'博客园',ok:true,loggedIn:false,loading:true}
       ];
       render();
     }
     refreshButton.classList.add('is-spinning');
     try{
-      const freshAuths=await Promise.all((['csdn','wechat'] as PlatformId[]).map(checkPlatform));
+      const freshAuths=await Promise.all((['csdn','wechat','cnblogs'] as PlatformId[]).map(checkPlatform));
       auths=freshAuths;
-      refreshPlatformSelection(selected,auths,[...(autoDefault?['csdn' as const]:[]),...(wechatAutoDefault?['wechat' as const]:[])],!initialized);
+      refreshPlatformSelection(selected,auths,[...(autoDefault?['csdn' as const]:[]),...(wechatAutoDefault?['wechat' as const]:[]),...(cnblogsAutoDefault?['cnblogs' as const]:[])],!initialized);
       initialized=true;
     }finally{
       refreshing=false;
@@ -371,6 +376,13 @@ function injectPublishIntegration(){
         <span class="jc-platform-name">微信公众号</span>
         <span class="jc-platform-status"><span class="jc-publish-spinner"></span></span>
       </label>
+      <label class="jc-publish-platform is-unlogged" data-platform="cnblogs">
+        <input type="checkbox" class="jc-platform-input" data-platform="cnblogs" disabled />
+        <span class="jc-platform-checkbox" aria-hidden="true">✓</span>
+        <img src="${CNBLOGS_LOGO}" class="jc-platform-icon" alt="" />
+        <span class="jc-platform-name">博客园</span>
+        <span class="jc-platform-status"><span class="jc-publish-spinner"></span></span>
+      </label>
     </div>
     <div class="jc-publish-sync-tip">掘金发布成功后自动保存至所选平台的草稿箱</div>
   </div>`;
@@ -378,7 +390,7 @@ function injectPublishIntegration(){
 
   let refreshing=false;
 
-  (['csdn','wechat'] as PlatformId[]).forEach(platform=>{
+  (['csdn','wechat','cnblogs'] as PlatformId[]).forEach(platform=>{
     const card=field.querySelector<HTMLLabelElement>(`.jc-publish-platform[data-platform="${platform}"]`)!;
     const input=card.querySelector<HTMLInputElement>('.jc-platform-input')!;
 
@@ -440,9 +452,9 @@ function injectPublishIntegration(){
     if(refreshing||!isExtensionAlive())return;
     refreshing=true;
     // 加载态只更新界面，保留上次确认的账号供已选平台创建请求快照。
-    (['csdn','wechat'] as PlatformId[]).forEach(platform=>updateCardAuth({platform,name:PLATFORM_META[platform].name,ok:true,loggedIn:false,loading:true}));
+    (['csdn','wechat','cnblogs'] as PlatformId[]).forEach(platform=>updateCardAuth({platform,name:PLATFORM_META[platform].name,ok:true,loggedIn:false,loading:true}));
     try{
-      const freshAuths=await Promise.all((['csdn','wechat'] as PlatformId[]).map(checkPlatform));
+      const freshAuths=await Promise.all((['csdn','wechat','cnblogs'] as PlatformId[]).map(checkPlatform));
       // 旧面板或已移除字段的检测结果不得覆盖当前选择与账号。
       if(publishPanel!==panel||!field.isConnected||currentPublishRefresh!==refresh)return;
       publishAuths=freshAuths;
@@ -735,6 +747,7 @@ if(isExtensionAlive()){
     if(!isExtensionAlive())return;
     autoDefault=result?.settings?.autoSyncAfterPublish!==false;
     wechatAutoDefault=result?.settings?.wechatAutoSync!==false;
+    cnblogsAutoDefault=result?.settings?.cnblogsAutoSync===true;
     reportJuejinUuid();
     inject();
     globalObserver=new MutationObserver(scheduleInject);

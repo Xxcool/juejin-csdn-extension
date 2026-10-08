@@ -30,12 +30,14 @@
 }
 .jc-publish-platforms {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   max-width: 435px;
 }
 .jc-publish-platform {
-  flex: 1;
+  flex: 1 1 calc(50% - 6px);
+  max-width: calc(50% - 6px);
   min-width: 140px;
   height: 32px;
   display: inline-flex;
@@ -154,6 +156,7 @@
 }
 @media (max-width: 640px) {
   .jc-publish-platforms { flex-direction: column; }
+  .jc-publish-platform { width: 100%; max-width: none; }
 }
 
 .content-main .more-list > .jc-history-sync {

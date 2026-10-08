@@ -1,7 +1,7 @@
-// 扩展后台协调器：管理登录状态、同步任务和 CSDN 草稿写入。
+// 扩展后台协调器：管理多平台登录状态、同步任务和草稿写入。
 import {Semaphore} from './core/async';
 import {allTasks,clearAllTasks,deleteTask,finishSavedTask,getArticleDraftMapping,getSettings,migrateStoredTasks,patchTask,preserveTaskMappings,putTask,removeArticleDraftMapping,saveSettings,saveTasks} from './core/store';
-import {canDeleteTask,extractCsdnArticleId,findMatchingTask,isActiveTask,isInterruptedTask,isRetryableTask,isUncertainCreateTask} from './core/task';
+import {canDeleteTask,extractCsdnArticleId,findMatchingTask,isActiveTask,isInterruptedTask,isRetryableTask,isUncertainCreateTask,targetArticleId} from './core/task';
 import {SyncError,classifySyncError} from './core/diagnostic';
 import {isSupportedMessage} from './core/message';
 import {buildTaskNotification,showTaskNotification} from './core/notify';
@@ -11,6 +11,7 @@ import {fetchJuejinDraftByArticleId,fetchJuejinDraftByDraftId} from './source/ju
 import {csdnAdapter} from './targets/csdn';
 import {buildDryRunReport,checkCsdnAuth,fetchCsdnArticleState,fetchCsdnCategories,saveDraftViaApi,validateCsdnArticle} from './targets/csdn-api';
 import {checkWechatAuth,requireWechatAccount,saveWechatDraft} from './targets/wechat-api';
+import {checkCnblogsAuth,fetchCnblogsPostState,saveCnblogsDraft} from './targets/cnblogs-api';
 import type {Article,ExtensionSettings,PlatformId,SyncTask,TaskStage} from './types';
 import {uid} from './types';
 
@@ -50,6 +51,13 @@ async function runTask(task:SyncTask){
       if(!task.wechatAccountId)throw new SyncError('旧微信任务未绑定公众号，已阻止自动恢复，请从掘金重新发起并核对旧草稿','blocked','authentication');
       await requireWechatAccount(task.wechatAccountId);
     }
+    if(task.platform==='cnblogs'){
+      const auth=await checkCnblogsAuth();
+      if(!auth.ok)throw new SyncError(auth.message||'博客园登录状态检测失败','platform-change','authentication');
+      if(!auth.loggedIn)throw new SyncError('请先登录博客园','login','authentication');
+      if(!auth.blogEnabled)throw new SyncError('博客园账号尚未开通博客','blocked','authentication');
+      if(task.cnblogsAccountId&&auth.accountId!==task.cnblogsAccountId)throw new SyncError('当前博客园账号与任务创建时不一致，已阻止覆盖草稿','blocked','authentication');
+    }
     let article=await ensureArticleContent(task.article);
     // 发布面板的封面可能尚未被主世界缓存捕获；微信正式同步前按草稿详情补齐封面、摘要和标签。
     if(task.platform==='wechat'&&article.cover===undefined&&article.sourceDraftId){
@@ -62,12 +70,13 @@ async function runTask(task:SyncTask){
     }
     if(task.platform==='csdn')validateCsdnArticle(article);
     const settings=await getSettings();
-    const platformName=task.platform==='wechat'?'微信公众号':'CSDN';
+    const platformName=task.platform==='wechat'?'微信公众号':task.platform==='cnblogs'?'博客园':'CSDN';
     await patchTask(task.id,{status:'checking-login',attempts:task.attempts+1,error:undefined,diagnostic:undefined,warnings:undefined,stats:undefined,progress:{current:0,total:0,message:`正在检查${platformName}登录状态`}});
     const transformed=task.platform==='csdn'?csdnAdapter.transform(article):article;
     await patchTask(task.id,{status:'transforming',progress:{current:0,total:0,message:'正在处理文章内容'}});
     stage='authentication';
     let csdnArticleId=task.csdnArticleId;
+    let cnblogsPostId=task.cnblogsPostId;
     const clearCsdnTarget=async()=>{
       csdnArticleId=undefined;
       await patchTask(task.id,{csdnArticleId:undefined,draftUrl:undefined});
@@ -83,13 +92,25 @@ async function runTask(task:SyncTask){
         await clearCsdnTarget();
       }
     }
-    const isUpdate=()=>task.platform==='wechat'?!!task.wechatAppMsgId:!!csdnArticleId;
+    const clearCnblogsTarget=async()=>{
+      cnblogsPostId=undefined;
+      await patchTask(task.id,{cnblogsPostId:undefined,draftUrl:undefined});
+      await removeArticleDraftMapping(task.article,'cnblogs',task.cnblogsAccountId);
+    };
+    if(task.platform==='cnblogs'&&cnblogsPostId){
+      const state=await fetchCnblogsPostState(cnblogsPostId);
+      if(state==='unauthorized')throw new SyncError('请先登录博客园，再更新已有草稿','login','authentication');
+      if(state==='published')throw new SyncError('该博客园随笔已发布，为避免覆盖线上内容已阻断同步','blocked','draft');
+      if(state==='unknown')throw new SyncError('无法确认博客园随笔仍是草稿，已暂停更新','blocked','draft');
+      if(state==='missing')await clearCnblogsTarget();
+    }
+    const isUpdate=()=>!!targetArticleId({...task,csdnArticleId,cnblogsPostId});
     const callbacks={
       onPreparing:()=>{stage='content';},
       onProgress:async(progress:SyncTask['progress'])=>{stage='images';if(progress)await patchTask(task.id,{status:'transforming',progress});},
       onSaving:async()=>{stage='draft';await patchTask(task.id,{status:'writing',progress:{current:1,total:1,message:isUpdate()?`正在更新${platformName}草稿`:`正在创建${platformName}草稿`}});}
     };
-    const result=task.platform==='wechat'?await saveWechatDraft(transformed,{...callbacks,appMsgId:task.wechatAppMsgId,accountId:task.wechatAccountId}):await saveDraftViaApi(transformed,{
+    const result=task.platform==='wechat'?await saveWechatDraft(transformed,{...callbacks,appMsgId:task.wechatAppMsgId,accountId:task.wechatAccountId}):task.platform==='cnblogs'?await saveCnblogsDraft(transformed,{...callbacks,postId:cnblogsPostId,expectedAccountId:task.cnblogsAccountId,appendSourceLink:settings.appendSourceLink}):await saveDraftViaApi(transformed,{
       articleId:csdnArticleId,
       categories:resolveCsdnCategories(transformed.tags,settings),
       syncCover:settings.syncCover,
@@ -102,7 +123,8 @@ async function runTask(task:SyncTask){
       onDowngradeToCreate:clearCsdnTarget
     });
     savedResult=result;
-    await finishSavedTask(task.id,result.articleId,result.draftUrl,{draftUrl:result.draftUrl,...(task.platform==='wechat'?{wechatAppMsgId:result.articleId}:{csdnArticleId:result.articleId}),warnings:result.warnings,stats:{...result.stats,durationMs:Date.now()-startedAt},progress:undefined,error:undefined,diagnostic:undefined});
+    const targetPatch=task.platform==='wechat'?{wechatAppMsgId:result.articleId}:task.platform==='cnblogs'?{cnblogsPostId:result.articleId}:{csdnArticleId:result.articleId};
+    await finishSavedTask(task.id,result.articleId,result.draftUrl,{draftUrl:result.draftUrl,...targetPatch,warnings:result.warnings,stats:{...result.stats,durationMs:Date.now()-startedAt},progress:undefined,error:undefined,diagnostic:undefined});
     // 徽标是保存后的附属操作，失败不能把已落盘的远端成功改写成同步失败。
     try{
       await chrome.action.setBadgeBackgroundColor({color:'#1d6744'});
@@ -116,7 +138,8 @@ async function runTask(task:SyncTask){
     if(savedResult){
       // 远端已返回草稿 ID；即使首次本地写入失败，也不能允许按“新建失败”自动重试。
       const diagnostic=classifySyncError(new SyncError('草稿已在目标平台保存，但本地结果记录失败。请先检查目标草稿箱','interrupted','recovery'),'recovery');
-      try{await patchTask(task.id,{status:'needs-user',draftUrl:savedResult.draftUrl,...(task.platform==='wechat'?{wechatAppMsgId:savedResult.articleId}:{csdnArticleId:savedResult.articleId}),error:diagnostic.message,diagnostic,progress:undefined});}
+      const targetPatch=task.platform==='wechat'?{wechatAppMsgId:savedResult.articleId}:task.platform==='cnblogs'?{cnblogsPostId:savedResult.articleId}:{csdnArticleId:savedResult.articleId};
+      try{await patchTask(task.id,{status:'needs-user',draftUrl:savedResult.draftUrl,...targetPatch,error:diagnostic.message,diagnostic,progress:undefined});}
       catch(recordError){console.warn('草稿已保存，但本地任务记录仍无法写入：',recordError);}
       throw error;
     }
@@ -140,8 +163,13 @@ async function execute(task:SyncTask){
 
 async function create(article:Article,platform:PlatformId='csdn',expectedAccountId?:string){
   const wechatAccountId=platform==='wechat'?await requireWechatAccount(expectedAccountId):undefined;
+  const cnblogsAuth=platform==='cnblogs'?await checkCnblogsAuth():undefined;
+  if(cnblogsAuth&&!cnblogsAuth.ok)throw new SyncError(cnblogsAuth.message||'博客园登录状态检测失败','platform-change','authentication');
+  if(cnblogsAuth&&!cnblogsAuth.loggedIn)throw new SyncError('请先登录博客园','login','authentication');
+  if(cnblogsAuth&&!cnblogsAuth.blogEnabled)throw new SyncError('博客园账号尚未开通博客','blocked','authentication');
+  const cnblogsAccountId=platform==='cnblogs'?cnblogsAuth?.accountId:undefined;
   const tasks=await allTasks();
-  const previous=findMatchingTask(tasks,article,platform,wechatAccountId);
+  const previous=findMatchingTask(tasks,article,platform,platform==='cnblogs'?cnblogsAccountId:wechatAccountId);
   if(previous?.diagnostic?.category==='interrupted')throw new SyncError('上次写入结果尚未确认，请先检查目标草稿箱，再在同步记录中确认重试','interrupted','draft');
   if(platform==='wechat'&&(findMatchingTask(tasks,article,'wechat')?.wechatAppMsgId||await getArticleDraftMapping(article,'wechat'))){
     throw new SyncError('发现未绑定账号的旧微信草稿映射，已阻止自动覆盖，请先核对旧草稿归属','blocked','authentication');
@@ -150,15 +178,16 @@ async function create(article:Article,platform:PlatformId='csdn',expectedAccount
   if(active)return active;
   const settings=await getSettings();
   const now=new Date().toISOString();
-  const mapping=!previous?await getArticleDraftMapping(article,platform,wechatAccountId):undefined;
+  const mapping=!previous?await getArticleDraftMapping(article,platform,platform==='cnblogs'?cnblogsAccountId:wechatAccountId):undefined;
   const csdnArticleId=platform==='csdn'?(previous?.csdnArticleId||extractCsdnArticleId(previous?.draftUrl)||mapping?.csdnArticleId):undefined;
   const wechatAppMsgId=platform==='wechat'?(previous?.wechatAppMsgId||mapping?.wechatAppMsgId):undefined;
+  const cnblogsPostId=platform==='cnblogs'?(previous?.cnblogsPostId||mapping?.cnblogsPostId):undefined;
   const draftUrl=previous?.draftUrl||mapping?.draftUrl;
-  const targetId=platform==='csdn'?csdnArticleId:wechatAppMsgId;
+  const targetId=platform==='csdn'?csdnArticleId:platform==='cnblogs'?cnblogsPostId:wechatAppMsgId;
   const needsConfirmation=shouldConfirmDraftUpdate(settings,targetId);
   const task:SyncTask=previous
-    ?{...previous,article,status:needsConfirmation?'needs-confirmation':'queued',updatedAt:now,csdnArticleId,wechatAppMsgId,error:undefined,diagnostic:undefined,warnings:undefined,stats:undefined,progress:undefined}
-    :{id:uid(),article,platform,wechatAccountId,status:needsConfirmation?'needs-confirmation':'queued',createdAt:now,updatedAt:now,attempts:0,csdnArticleId,wechatAppMsgId,draftUrl};
+    ?{...previous,article,status:needsConfirmation?'needs-confirmation':'queued',updatedAt:now,csdnArticleId,wechatAppMsgId,cnblogsPostId,cnblogsAccountId,error:undefined,diagnostic:undefined,warnings:undefined,stats:undefined,progress:undefined}
+    :{id:uid(),article,platform,wechatAccountId,cnblogsAccountId,status:needsConfirmation?'needs-confirmation':'queued',createdAt:now,updatedAt:now,attempts:0,csdnArticleId,wechatAppMsgId,cnblogsPostId,draftUrl};
   await putTask(task);
   if(needsConfirmation)return task;
   await execute(task);
@@ -171,7 +200,7 @@ async function recoverInterruptedTasks(){
   const uncertain=tasks.filter(isUncertainCreateTask);
   await Promise.all(uncertain.map(task=>patchTask(task.id,{
     status:'needs-user',
-    error:`上次创建${task.platform==='wechat'?'微信公众号':'CSDN'}草稿时扩展被中断，无法确认是否已保存。请先检查目标草稿箱，再决定是否重试。`,
+    error:`上次创建${task.platform==='wechat'?'微信公众号':task.platform==='cnblogs'?'博客园':'CSDN'}草稿时扩展被中断，无法确认是否已保存。请先检查目标草稿箱，再决定是否重试。`,
     diagnostic:classifySyncError(new Error('上次创建草稿时扩展被中断，无法确认是否已保存。'),'recovery'),
     progress:undefined
   })));
@@ -202,11 +231,15 @@ async function openCsdnLogin(){
 }
 
 async function openWechatLogin(){await chrome.tabs.create({url:'https://mp.weixin.qq.com/',active:true});}
+async function openCnblogsLogin(){await chrome.tabs.create({url:'https://i.cnblogs.com/posts/edit',active:true});}
+function platformName(platform:PlatformId){return platform==='wechat'?'微信公众平台':platform==='cnblogs'?'博客园':'CSDN';}
+async function checkPlatformAuth(platform:PlatformId){return platform==='wechat'?checkWechatAuth():platform==='cnblogs'?checkCnblogsAuth():checkCsdnAuth();}
+async function openPlatformLogin(platform:PlatformId){return platform==='wechat'?openWechatLogin():platform==='cnblogs'?openCnblogsLogin():openCsdnLogin();}
 
 async function syncHistory(request:Omit<PendingHistory,'expiresAt'>){
   if(request.uuid)await chrome.storage.local.set({[JUEJIN_UUID_KEY]:request.uuid});
-  const auth=request.platform==='wechat'?await checkWechatAuth():await checkCsdnAuth();
-  const name=request.platform==='wechat'?'微信公众平台':'CSDN';
+  const auth=await checkPlatformAuth(request.platform);
+  const name=platformName(request.platform);
   if(!auth.ok)throw new Error(auth.message||`${name}登录状态检测失败`);
   if(!auth.loggedIn){
     await pendingHistoryGate.run(async()=>{
@@ -215,7 +248,7 @@ async function syncHistory(request:Omit<PendingHistory,'expiresAt'>){
       requests.push(pending);
       await savePendingHistories(requests);
     });
-    await (request.platform==='wechat'?openWechatLogin():openCsdnLogin());
+    await openPlatformLogin(request.platform);
     return{ok:false,needsLogin:true,message:`请先登录${name}，返回掘金后将继续同步`};
   }
   const article=await fetchJuejinDraftByArticleId(request.articleId,request.uuid,request.title);
@@ -229,7 +262,7 @@ async function resumePendingHistory(){
     const results:{articleId:string;platform:PlatformId;task:SyncTask}[]=[];
     const errors:{articleId:string;platform:PlatformId;message:string}[]=[];
     for(const request of [...requests]){
-      const auth=request.platform==='wechat'?await checkWechatAuth():await checkCsdnAuth();
+      const auth=await checkPlatformAuth(request.platform);
       if(!auth.ok){errors.push({articleId:request.articleId,platform:request.platform,message:auth.message||'目标平台登录状态检测失败'});continue;}
       if(!auth.loggedIn)continue;
       let article:Article|undefined;
@@ -240,7 +273,8 @@ async function resumePendingHistory(){
       }catch(error){
         errors.push({articleId:request.articleId,platform:request.platform,message:(error as Error).message||'恢复同步失败'});
         // 任务已落盘（即使目标平台写入失败）时，交由任务记录处理，避免登录续传再次自动执行。
-        if(!article||!findMatchingTask(await allTasks(),article,request.platform,request.wechatAccountId))continue;
+        const accountId=request.platform==='cnblogs'&&'accountId' in auth?auth.accountId:request.wechatAccountId;
+        if(!article||!findMatchingTask(await allTasks(),article,request.platform,accountId))continue;
       }
       requests=requests.filter(item=>pendingHistoryKey(item)!==pendingHistoryKey(request));
       await savePendingHistories(requests);
@@ -268,7 +302,7 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   (async()=>{
     await recovery;
     if(message.type==='SYNC_NEW_ARTICLE'){
-      const platform=message.platform==='wechat'?'wechat':'csdn';
+      const platform:PlatformId=message.platform==='wechat'?'wechat':message.platform==='cnblogs'?'cnblogs':'csdn';
       reply({ok:true,task:await create(message.article as Article,platform,typeof message.wechatAccountId==='string'?message.wechatAccountId:undefined)});
     }else if(message.type==='CHECK_CSDN_STATUS'){
       reply(await checkCsdnAuth());
@@ -280,12 +314,17 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
       reply({...auth,accountId:meta?.userName});
     }else if(message.type==='OPEN_WECHAT_LOGIN'){
       await openWechatLogin();reply({ok:true});
+    }else if(message.type==='CHECK_CNBLOGS_STATUS'){
+      reply(await checkCnblogsAuth());
+    }else if(message.type==='OPEN_CNBLOGS_LOGIN'){
+      await openCnblogsLogin();reply({ok:true});
     }else if(message.type==='REPORT_JUEJIN_UUID'){
       const uuid=String(message.uuid||'');
       if(uuid)await chrome.storage.local.set({[JUEJIN_UUID_KEY]:uuid});
       reply({ok:true});
     }else if(message.type==='SYNC_HISTORY_ARTICLE'){
-      reply(await syncHistory({articleId:String(message.articleId),title:String(message.title||''),sourceUrl:String(message.sourceUrl||''),uuid:String(message.uuid||''),platform:message.platform==='wechat'?'wechat':'csdn',wechatAccountId:typeof message.wechatAccountId==='string'?message.wechatAccountId:undefined}));
+      const platform:PlatformId=message.platform==='wechat'?'wechat':message.platform==='cnblogs'?'cnblogs':'csdn';
+      reply(await syncHistory({articleId:String(message.articleId),title:String(message.title||''),sourceUrl:String(message.sourceUrl||''),uuid:String(message.uuid||''),platform,wechatAccountId:typeof message.wechatAccountId==='string'?message.wechatAccountId:undefined}));
     }else if(message.type==='RESUME_PENDING_HISTORY'){
       reply(await resumePendingHistory());
     }else if(message.type==='GET_TASKS'){
@@ -301,10 +340,11 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
       else if(task){
         if(message.asNew){
           if(task.platform==='wechat')task.wechatAppMsgId=undefined;
+          else if(task.platform==='cnblogs')task.cnblogsPostId=undefined;
           else task.csdnArticleId=undefined;
           task.draftUrl=undefined;
-          await removeArticleDraftMapping(task.article,task.platform,task.wechatAccountId);
-          await patchTask(task.id,{wechatAppMsgId:undefined,csdnArticleId:undefined,draftUrl:undefined,error:undefined,diagnostic:undefined,status:'queued'});
+          await removeArticleDraftMapping(task.article,task.platform,task.platform==='cnblogs'?task.cnblogsAccountId:task.wechatAccountId);
+          await patchTask(task.id,{wechatAppMsgId:undefined,csdnArticleId:undefined,cnblogsPostId:undefined,draftUrl:undefined,error:undefined,diagnostic:undefined,status:'queued'});
         }
         void execute(task).catch(()=>{});
         reply({ok:true});

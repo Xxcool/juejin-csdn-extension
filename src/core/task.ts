@@ -5,10 +5,12 @@ export function articleIdentityKeys(article:SyncTask['article']){
   return[...new Set([article.id,article.sourceDraftId].filter((value):value is string=>!!value))];
 }
 
-export function findMatchingTask(tasks:SyncTask[],article:SyncTask['article'],platform:SyncTask['platform']='csdn',wechatAccountId?:string){
+export function findMatchingTask(tasks:SyncTask[],article:SyncTask['article'],platform:SyncTask['platform']='csdn',accountId?:string){
   const identities=new Set(articleIdentityKeys(article));
-  return tasks.find(task=>articleIdentityKeys(task.article).some(identity=>identities.has(identity))&&task.platform===platform&&(platform!=='wechat'||task.wechatAccountId===wechatAccountId));
+  return tasks.find(task=>articleIdentityKeys(task.article).some(identity=>identities.has(identity))&&task.platform===platform&&(platform==='wechat'?task.wechatAccountId===accountId:platform==='cnblogs'?task.cnblogsAccountId===accountId:true));
 }
+
+export function targetArticleId(task:SyncTask){return task.platform==='wechat'?task.wechatAppMsgId:task.platform==='cnblogs'?task.cnblogsPostId:task.csdnArticleId;}
 
 export function extractCsdnArticleId(draftUrl?:string){
   if(!draftUrl)return undefined;
@@ -16,12 +18,12 @@ export function extractCsdnArticleId(draftUrl?:string){
 }
 
 export function isInterruptedTask(task:SyncTask){
-  return['queued','checking-login','transforming'].includes(task.status)||(task.status==='writing'&&!!(task.csdnArticleId||task.wechatAppMsgId));
+  return['queued','checking-login','transforming'].includes(task.status)||(task.status==='writing'&&!!targetArticleId(task));
 }
 
 /** 新建草稿写入中断后无法判断服务端是否成功，自动重试可能产生重复草稿。 */
 export function isUncertainCreateTask(task:SyncTask){
-  return task.status==='writing'&&!task.csdnArticleId&&!task.wechatAppMsgId;
+  return task.status==='writing'&&!targetArticleId(task);
 }
 
 export function isActiveTask(task:SyncTask){return['queued','checking-login','transforming','writing'].includes(task.status);}

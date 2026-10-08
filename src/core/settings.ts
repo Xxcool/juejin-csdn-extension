@@ -4,6 +4,7 @@ import type {CategoryMapping,ExtensionSettings} from '../types';
 export const defaultSettings:ExtensionSettings={
   autoSyncAfterPublish:true,
   wechatAutoSync:true,
+  cnblogsAutoSync:false,
   defaultCsdnCategory:'',
   categoryMappings:[],
   syncCover:true,
@@ -21,6 +22,7 @@ export function normalizeSettings(value:unknown):ExtensionSettings{
   return{
     autoSyncAfterPublish:input.autoSyncAfterPublish!==false,
     wechatAutoSync:input.wechatAutoSync!==false,
+    cnblogsAutoSync:input.cnblogsAutoSync===true,
     defaultCsdnCategory:clean(input.defaultCsdnCategory),
     categoryMappings:mappings,
     syncCover:input.syncCover!==false,

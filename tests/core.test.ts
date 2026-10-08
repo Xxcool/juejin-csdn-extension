@@ -66,6 +66,14 @@ describe('任务历史',()=>{
     expect(findMatchingTask([task],historyArticle)).toBe(task);
   });
 
+  it('博客园草稿按账号隔离，并可从写入中断状态恢复',()=>{
+    const base:SyncTask={id:'cnblogs-a',article,platform:'cnblogs',cnblogsAccountId:'100',cnblogsPostId:'88',status:'writing',createdAt:'2026-09-01T00:00:00Z',updatedAt:'2026-09-01T00:00:00Z',attempts:1};
+    const another:SyncTask={...base,id:'cnblogs-b',cnblogsAccountId:'200'};
+    expect(findMatchingTask([base,another],article,'cnblogs','200')).toBe(another);
+    expect(isInterruptedTask(base)).toBe(true);
+    expect(uniqueTasks([base,another])).toHaveLength(2);
+  });
+
   it('识别活动、可重试和可删除任务',()=>{
     const base:SyncTask={id:'task',article,platform:'csdn',status:'queued',createdAt:'2026-09-01T00:00:00Z',updatedAt:'2026-09-01T00:00:00Z',attempts:0};
     expect(isActiveTask(base)).toBe(true);
@@ -117,6 +125,7 @@ describe('任务历史',()=>{
 describe('同步设置',()=>{
   it('为旧设置补齐 0.4 默认值',()=>{
     expect(normalizeSettings({autoSyncAfterPublish:false})).toEqual({...defaultSettings,autoSyncAfterPublish:false});
+    expect(normalizeSettings({}).cnblogsAutoSync).toBe(false);
   });
 
   it('解析分类映射并按标签匹配、去重',()=>{
