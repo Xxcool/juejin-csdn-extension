@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "文章摆渡｜掘金同步到 CSDN、微信公众号与博客园",
+  "name": "掘金同步助手",
   "version": "1.3.1",
-  "description": "面向技术创作者的端侧安全内容摆渡中枢 · 一处专注写作，优雅摆渡全网阵地。",
+  "description": "将掘金文章同步到 CSDN、微信公众号与博客园草稿箱。",
   "icons": {"16":"logo-16.png","32":"logo-32.png","48":"logo-48.png","128":"logo-128.png"},
   "permissions": ["storage", "notifications", "alarms", "declarativeNetRequestWithHostAccess", "offscreen"],
   "host_permissions": ["https://juejin.cn/*", "https://*.juejin.cn/*", "https://*.byteimg.com/*", "https://*.bytecdn.cn/*", "https://bizapi.csdn.net/*", "https://*.myhuaweicloud.com/*", "https://mp.weixin.qq.com/*", "https://i.cnblogs.com/*", "https://upload.cnblogs.com/*"],
@@ -11,7 +11,7 @@
   },
   "background": {"service_worker": "background.js", "type": "module"},
   "web_accessible_resources": [{"resources":["platform-cnblogs.svg"],"matches":["https://juejin.cn/*"]}],
-  "action": {"default_popup": "popup.html", "default_title": "文章摆渡", "default_icon":{"16":"logo-16.png","32":"logo-32.png","48":"logo-48.png","128":"logo-128.png"}},
+  "action": {"default_popup": "popup.html", "default_title": "掘金同步助手", "default_icon":{"16":"logo-16.png","32":"logo-32.png","48":"logo-48.png","128":"logo-128.png"}},
   "content_scripts": [
     {"matches":["https://juejin.cn/*"],"js":["juejin-page.js"],"run_at":"document_idle","world":"MAIN"},
     {"matches":["https://juejin.cn/*"],"js":["juejin-content.js"],"css":["juejin-content.css"],"run_at":"document_idle"}

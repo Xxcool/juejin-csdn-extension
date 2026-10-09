@@ -8,7 +8,7 @@ const manifest=JSON.parse(fs.readFileSync('dist/manifest.json','utf8'));
 if(packageJson.version!==manifest.version)throw new Error('package.json 与 manifest.json 版本不一致');
 
 fs.mkdirSync('release',{recursive:true});
-const target=path.resolve('release',`article-ferry-v${manifest.version}.zip`);
+const target=path.resolve('release',`juejin-sync-v${manifest.version}.zip`);
 const output=fs.createWriteStream(target);
 const archive=new ZipArchive({zlib:{level:9}});
 const completed=new Promise((resolve,reject)=>{

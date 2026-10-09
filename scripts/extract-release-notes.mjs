@@ -72,7 +72,7 @@ function formatNotes(rawNotes, version) {
     '',
     '---',
     '### 📦 安装与使用',
-    `1. 下载下方 Assets 中的 \`article-ferry-v${version}.zip\` 压缩包并解压；`,
+    `1. 下载下方 Assets 中的 \`juejin-sync-v${version}.zip\` 压缩包并解压；`,
     '2. 打开 Chrome 浏览器，访问 \`chrome://extensions\`；',
     '3. 开启右上角“开发者模式”，点击“加载已解压的扩展程序”，选择解压目录即可；',
     '4. 更多详情请查阅 [README.md](https://github.com/Xxcool/juejin-csdn-extension#readme)。'
@@ -86,11 +86,11 @@ function defaultNotes(version) {
     '## 🚀 本次更新',
     '',
     `### ✨ 版本发布`,
-    `- ✨ 文章摆渡 v${version} 发布。`,
+    `- ✨ 掘金同步助手 v${version} 发布。`,
     '',
     '---',
     '### 📦 安装与使用',
-    `1. 下载下方 Assets 中的 \`article-ferry-v${version}.zip\` 压缩包并解压；`,
+    `1. 下载下方 Assets 中的 \`juejin-sync-v${version}.zip\` 压缩包并解压；`,
     '2. 打开 Chrome 浏览器，访问 \`chrome://extensions\`；',
     '3. 开启右上角“开发者模式”，点击“加载已解压的扩展程序”，选择解压目录即可；',
     '4. 更多详情请查阅 [README.md](https://github.com/Xxcool/juejin-csdn-extension#readme)。'

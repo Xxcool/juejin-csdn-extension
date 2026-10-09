@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="assets/logo-128.png" width="96" height="96" alt="文章摆渡 Logo">
-  <h1>⛵ 文章摆渡 · Article Ferry</h1>
-  <p><b>在掘金写作，一键摆渡，安全着陆至 CSDN、微信公众号与博客园草稿箱。</b></p>
+  <img src="assets/logo-128.png" width="96" height="96" alt="掘金同步助手 Logo">
+  <h1>掘金同步助手 · Juejin Sync</h1>
+  <p><b>将掘金文章同步到 CSDN、微信公众号与博客园草稿箱。</b></p>
   <p>
     <a href="https://github.com/Xxcool/juejin-csdn-extension/releases/latest">📥 下载安装包</a> ·
     <a href="https://artferry.vercel.app">🌐 项目网站</a> ·
@@ -14,7 +14,7 @@
 [![Tests](https://img.shields.io/badge/tests-100%20passed-brightgreen)](tests)
 [![License](https://img.shields.io/github/license/Xxcool/juejin-csdn-extension)](LICENSE)
 
-文章摆渡是一款 Chrome Manifest V3 浏览器扩展。它读取你主动选择的掘金文章或编辑器草稿，智能处理正文与图片，再安全着陆到目标平台的草稿箱。所有内容转换均在浏览器本地扩展中完成，直接与源站和目标平台通信，**不依赖任何托管账号密码的中转服务器**。
+掘金同步助手是一款 Chrome Manifest V3 浏览器扩展。它读取你主动选择的掘金文章或编辑器草稿，处理正文与图片，再同步到目标平台的草稿箱。所有内容转换均在浏览器本地扩展中完成，直接与源站和目标平台通信，**不依赖任何托管账号密码的中转服务器**。
 
 > ⚠️ **只同步草稿，不自动公开发布。** 同步完成后，请在目标平台检查排版、封面和内容，再自行决定发布。
 
@@ -49,7 +49,7 @@
 
 ### 📦 下载 Release 安装包（推荐）
 
-1. 📥 前往 [Releases 页面](https://github.com/Xxcool/juejin-csdn-extension/releases/latest) 下载最新版 `article-ferry-v1.3.1.zip` 并解压。
+1. 📥 前往 [Releases 页面](https://github.com/Xxcool/juejin-csdn-extension/releases/latest) 下载最新版 `juejin-sync-v1.3.1.zip` 并解压。
 2. 🌐 打开 Chrome 浏览器，访问 `chrome://extensions/`，开启右上角的 **“开发者模式”**。
 3. 📂 点击 **“加载已解压的扩展程序”**，选择解压出的目录。
 4. 🔑 在同一 Chrome 配置文件中登录掘金和需要同步的目标平台。

@@ -16,7 +16,7 @@
     </marker>
   </defs>
   <rect width="1600" height="900" rx="36" fill="url(#bg2)"/>
-  <text x="100" y="105" fill="#17243a" font-size="52" font-weight="700" font-family="PingFang SC,Microsoft YaHei,sans-serif">一篇文章的“摆渡”链路</text>
+  <text x="100" y="105" fill="#17243a" font-size="52" font-weight="700" font-family="PingFang SC,Microsoft YaHei,sans-serif">一篇文章的同步链路</text>
   <text x="100" y="155" fill="#718098" font-size="24" font-family="PingFang SC,Microsoft YaHei,sans-serif">从用户明确触发，到 CSDN 草稿可检查，每一步都有状态和失败出口</text>
 
   <path d="M250 415H1350" fill="none" stroke="url(#line)" stroke-width="10" stroke-linecap="round" opacity=".28"/>
