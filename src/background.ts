@@ -110,7 +110,14 @@ async function runTask(task:SyncTask){
       onProgress:async(progress:SyncTask['progress'])=>{stage='images';if(progress)await patchTask(task.id,{status:'transforming',progress});},
       onSaving:async()=>{stage='draft';await patchTask(task.id,{status:'writing',progress:{current:1,total:1,message:isUpdate()?`正在更新${platformName}草稿`:`正在创建${platformName}草稿`}});}
     };
-    const result=task.platform==='wechat'?await saveWechatDraft(transformed,{...callbacks,appMsgId:task.wechatAppMsgId,accountId:task.wechatAccountId}):task.platform==='cnblogs'?await saveCnblogsDraft(transformed,{...callbacks,postId:cnblogsPostId,expectedAccountId:task.cnblogsAccountId,appendSourceLink:settings.appendSourceLink}):await saveDraftViaApi(transformed,{
+    const result=task.platform==='wechat'?await saveWechatDraft(transformed,{...callbacks,appMsgId:task.wechatAppMsgId,accountId:task.wechatAccountId}):task.platform==='cnblogs'?await saveCnblogsDraft(transformed,{
+      ...callbacks,
+      postId:cnblogsPostId,
+      expectedAccountId:task.cnblogsAccountId,
+      appendSourceLink:settings.appendSourceLink,
+      syncCover:settings.syncCover,
+      autoSummary:settings.autoSummary
+    }):await saveDraftViaApi(transformed,{
       articleId:csdnArticleId,
       categories:resolveCsdnCategories(transformed.tags,settings),
       syncCover:settings.syncCover,
