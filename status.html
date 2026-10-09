@@ -1,0 +1,237 @@
+<!doctype html>
+<!-- 掘金同步助手公开状态页：读取仓库根目录 health.json，展示已上线平台的兼容性状态。 -->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>服务状态 · 掘金同步助手</title>
+  <style>
+    :root {
+      --ink: #f4f1e8;
+      --muted: #9f9b91;
+      --paper: #111310;
+      --panel: #191c17;
+      --line: #34382f;
+      --ok: #9ae66e;
+      --warn: #f5c451;
+      --bad: #ff766d;
+      --unknown: #aaa69d;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 8%, rgba(154, 230, 110, .11), transparent 26rem),
+        linear-gradient(rgba(255, 255, 255, .018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, .018) 1px, transparent 1px),
+        var(--paper);
+      background-size: auto, 28px 28px, 28px 28px, auto;
+      font-family: "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    main {
+      width: min(920px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: clamp(56px, 10vw, 112px) 0 64px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 32px;
+      align-items: end;
+      padding-bottom: 28px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .eyebrow,
+    .timestamp,
+    .state-label {
+      font-family: "SFMono-Regular", Consolas, monospace;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      color: var(--ok);
+      font-size: 12px;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 680px;
+      font-size: clamp(38px, 7vw, 76px);
+      line-height: .98;
+      letter-spacing: -.055em;
+      font-weight: 760;
+    }
+
+    .refresh {
+      appearance: none;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 11px 16px;
+      color: var(--ink);
+      background: rgba(255, 255, 255, .025);
+      cursor: pointer;
+      font: inherit;
+      transition: border-color .2s ease, transform .2s ease, background .2s ease;
+    }
+
+    .refresh:hover {
+      border-color: var(--ok);
+      background: rgba(154, 230, 110, .08);
+      transform: translateY(-1px);
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 18px;
+      align-items: center;
+      margin: 32px 0;
+      padding: 22px 24px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(25, 28, 23, .88);
+      box-shadow: 0 28px 80px rgba(0, 0, 0, .28);
+    }
+
+    .summary-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--unknown);
+      box-shadow: 0 0 0 7px rgba(170, 166, 157, .09);
+    }
+
+    .summary[data-level="ok"] .summary-dot { background: var(--ok); box-shadow: 0 0 0 7px rgba(154, 230, 110, .1); }
+    .summary[data-level="degraded"] .summary-dot { background: var(--warn); box-shadow: 0 0 0 7px rgba(245, 196, 81, .1); }
+    .summary[data-level="broken"] .summary-dot { background: var(--bad); box-shadow: 0 0 0 7px rgba(255, 118, 109, .1); }
+
+    .summary strong { display: block; font-size: 18px; }
+    .summary p { margin: 5px 0 0; color: var(--muted); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .platform {
+      min-height: 148px;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+    }
+
+    .platform-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .platform h2 { margin: 0; font-size: 19px; }
+    .platform p { margin: 30px 0 0; color: var(--muted); font-size: 14px; }
+    .state-label { color: var(--unknown); font-size: 11px; }
+    .platform[data-level="ok"] .state-label { color: var(--ok); }
+    .platform[data-level="degraded"] .state-label { color: var(--warn); }
+    .platform[data-level="broken"] .state-label { color: var(--bad); }
+
+    footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      margin-top: 30px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    footer a { color: var(--ink); text-underline-offset: 4px; }
+
+    @media (max-width: 640px) {
+      header { grid-template-columns: 1fr; align-items: start; }
+      .refresh { justify-self: start; }
+      .grid { grid-template-columns: 1fr; }
+      footer { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">Juejin Sync / System Status</p>
+        <h1>同步链路<br>运行状态</h1>
+      </div>
+      <button class="refresh" id="refresh" type="button">重新检测</button>
+    </header>
+
+    <section class="summary" id="summary" data-level="unknown" aria-live="polite">
+      <span class="summary-dot" aria-hidden="true"></span>
+      <div>
+        <strong id="summary-title">正在获取最新状态</strong>
+        <p id="summary-message">状态数据直接读取自开源仓库。</p>
+      </div>
+    </section>
+
+    <section class="grid" id="platforms" aria-label="平台状态"></section>
+
+    <footer>
+      <span class="timestamp" id="updated">更新时间：检测中</span>
+      <a href="https://github.com/juejin-sync/juejin-sync/issues">报告问题 ↗</a>
+    </footer>
+  </main>
+
+  <script>
+    const platforms = [
+      ['juejin', '掘金', '源文章读取与发布状态识别'],
+      ['csdn', 'CSDN', '草稿创建、更新与图片转存'],
+      ['wechat', '微信公众号', '草稿保存、封面与正文图片'],
+      ['cnblogs', '博客园', '随笔草稿、题图与图片上传']
+    ];
+    const labels = { ok: '正常', degraded: '部分异常', broken: '不可用', unknown: '未知' };
+
+    const render = data => {
+      const levels = platforms.map(([key]) => labels[data[key]] ? data[key] : 'unknown');
+      const overall = levels.includes('broken') ? 'broken' : levels.includes('degraded') ? 'degraded' : levels.every(level => level === 'ok') ? 'ok' : 'unknown';
+      const title = { ok: '所有已上线同步链路正常', degraded: '部分链路运行不稳定', broken: '检测到不可用链路', unknown: '暂时无法确认完整状态' }[overall];
+      const summary = document.querySelector('#summary');
+      summary.dataset.level = overall;
+      document.querySelector('#summary-title').textContent = title;
+      document.querySelector('#summary-message').textContent = data.message || '扩展只会在用户主动操作时执行同步。';
+      document.querySelector('#platforms').innerHTML = platforms.map(([key, name, detail]) => {
+        const level = labels[data[key]] ? data[key] : 'unknown';
+        return `<article class="platform" data-level="${level}"><div class="platform-head"><h2>${name}</h2><span class="state-label">${labels[level]}</span></div><p>${detail}</p></article>`;
+      }).join('');
+      const date = data.updatedAt ? new Date(data.updatedAt) : null;
+      document.querySelector('#updated').textContent = `更新时间：${date && !Number.isNaN(date.valueOf()) ? date.toLocaleString('zh-CN', { hour12: false }) : '未知'}`;
+    };
+
+    const load = async () => {
+      const button = document.querySelector('#refresh');
+      button.disabled = true;
+      try {
+        const response = await fetch(`./health.json?t=${Date.now()}`, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        render(await response.json());
+      } catch {
+        render({ message: '状态数据读取失败，请稍后重试或前往 GitHub Issues 反馈。' });
+      } finally {
+        button.disabled = false;
+      }
+    };
+
+    document.querySelector('#refresh').addEventListener('click', load);
+    load();
+  </script>
+</body>
+</html>
