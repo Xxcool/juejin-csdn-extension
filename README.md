@@ -3,16 +3,16 @@
   <h1>掘金同步助手 · Juejin Sync</h1>
   <p><b>将掘金文章同步到 CSDN、微信公众号与博客园草稿箱。</b></p>
   <p>
-    <a href="https://github.com/Xxcool/juejin-csdn-extension/releases/latest">📥 下载安装包</a> ·
+    <a href="https://github.com/juejin-sync/juejin-sync/releases/latest">📥 下载安装包</a> ·
     <a href="https://artferry.vercel.app">🌐 项目网站</a> ·
     <a href="CHANGELOG.md">📜 更新日志</a>
   </p>
 </div>
 
-[![Release](https://img.shields.io/github/v/release/Xxcool/juejin-csdn-extension)](https://github.com/Xxcool/juejin-csdn-extension/releases)
-[![CI](https://github.com/Xxcool/juejin-csdn-extension/actions/workflows/ci.yml/badge.svg)](https://github.com/Xxcool/juejin-csdn-extension/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/juejin-sync/juejin-sync)](https://github.com/juejin-sync/juejin-sync/releases)
+[![CI](https://github.com/juejin-sync/juejin-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/juejin-sync/juejin-sync/actions/workflows/ci.yml)
 [![Tests](https://img.shields.io/badge/tests-100%20passed-brightgreen)](tests)
-[![License](https://img.shields.io/github/license/Xxcool/juejin-csdn-extension)](LICENSE)
+[![License](https://img.shields.io/github/license/juejin-sync/juejin-sync)](LICENSE)
 
 掘金同步助手是一款 Chrome Manifest V3 浏览器扩展。它读取你主动选择的掘金文章或编辑器草稿，处理正文与图片，再同步到目标平台的草稿箱。所有内容转换均在浏览器本地扩展中完成，直接与源站和目标平台通信，**不依赖任何托管账号密码的中转服务器**。
 
@@ -49,7 +49,7 @@
 
 ### 📦 下载 Release 安装包（推荐）
 
-1. 📥 前往 [Releases 页面](https://github.com/Xxcool/juejin-csdn-extension/releases/latest) 下载最新版 `juejin-sync-v1.3.1.zip` 并解压。
+1. 📥 前往 [Releases 页面](https://github.com/juejin-sync/juejin-sync/releases/latest) 下载最新版 `juejin-sync-v1.3.1.zip` 并解压。
 2. 🌐 打开 Chrome 浏览器，访问 `chrome://extensions/`，开启右上角的 **“开发者模式”**。
 3. 📂 点击 **“加载已解压的扩展程序”**，选择解压出的目录。
 4. 🔑 在同一 Chrome 配置文件中登录掘金和需要同步的目标平台。
@@ -62,7 +62,7 @@
 建议使用与 CI 一致的 Node.js 22 和 npm：
 
 ```bash
-git clone https://github.com/Xxcool/juejin-csdn-extension.git
+git clone https://github.com/juejin-sync/juejin-sync.git
 cd juejin-csdn-extension
 npm ci
 npm run check
@@ -173,6 +173,6 @@ npm run build
 
 ## 💬 反馈与贡献
 
-欢迎通过 [GitHub Issues](https://github.com/Xxcool/juejin-csdn-extension/issues) 提交反馈或建议。请提供扩展版本、操作入口、目标平台、复现步骤及脱敏后的诊断日志；切勿提交 Cookie、token、私密文章正文等敏感信息。
+欢迎通过 [GitHub Issues](https://github.com/juejin-sync/juejin-sync/issues) 提交反馈或建议。请提供扩展版本、操作入口、目标平台、复现步骤及脱敏后的诊断日志；切勿提交 Cookie、token、私密文章正文等敏感信息。
 
 本项目采用 [MIT License](LICENSE) 开源协议。第三方依赖说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

@@ -413,7 +413,7 @@ async function checkHealthBanner(){
   }
 }
 
-const STATUS_PAGE_URL='https://xxcool.github.io/juejin-csdn-extension/status.html';
+const STATUS_PAGE_URL='https://juejin-sync.github.io/juejin-sync/status.html';
 
 type DryRunReport={titleLength:number;contentLength:number;summaryPreview:string;categories:string[];imageCount:number;images:string[];containerCount:number;codeFenceCount:number;issues:string[];notices:string[]};
 

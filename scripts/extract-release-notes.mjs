@@ -75,7 +75,7 @@ function formatNotes(rawNotes, version) {
     `1. 下载下方 Assets 中的 \`juejin-sync-v${version}.zip\` 压缩包并解压；`,
     '2. 打开 Chrome 浏览器，访问 \`chrome://extensions\`；',
     '3. 开启右上角“开发者模式”，点击“加载已解压的扩展程序”，选择解压目录即可；',
-    '4. 更多详情请查阅 [README.md](https://github.com/Xxcool/juejin-csdn-extension#readme)。'
+    '4. 更多详情请查阅 [README.md](https://github.com/juejin-sync/juejin-sync#readme)。'
   );
 
   return resultLines.join('\n');
@@ -93,7 +93,7 @@ function defaultNotes(version) {
     `1. 下载下方 Assets 中的 \`juejin-sync-v${version}.zip\` 压缩包并解压；`,
     '2. 打开 Chrome 浏览器，访问 \`chrome://extensions\`；',
     '3. 开启右上角“开发者模式”，点击“加载已解压的扩展程序”，选择解压目录即可；',
-    '4. 更多详情请查阅 [README.md](https://github.com/Xxcool/juejin-csdn-extension#readme)。'
+    '4. 更多详情请查阅 [README.md](https://github.com/juejin-sync/juejin-sync#readme)。'
   ].join('\n');
 }
 

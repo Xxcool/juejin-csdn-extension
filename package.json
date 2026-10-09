@@ -7,7 +7,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Xxcool/juejin-csdn-extension.git"
+    "url": "https://github.com/juejin-sync/juejin-sync.git"
   },
   "type": "module",
   "scripts": {

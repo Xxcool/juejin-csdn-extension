@@ -1,7 +1,7 @@
 // 轻量远程健康检查：定期读取仓库发布的状态 JSON，提前预警平台接口变动；任何异常静默降级，绝不阻断同步。
 export const HEALTH_CHECK_ALARM='health-check';
-export const HEALTH_URL='https://raw.githubusercontent.com/Xxcool/juejin-csdn-extension/master/health.json';
-export const STATUS_PAGE_URL='https://xxcool.github.io/juejin-csdn-extension/status.html';
+export const HEALTH_URL='https://raw.githubusercontent.com/juejin-sync/juejin-sync/master/health.json';
+export const STATUS_PAGE_URL='https://juejin-sync.github.io/juejin-sync/status.html';
 
 export type PlatformHealth='ok'|'degraded'|'broken'|'unknown';
 export type HealthStatus={csdn:PlatformHealth;juejin:PlatformHealth;wechat?:PlatformHealth;cnblogs?:PlatformHealth;message:string;sourceUrl:string;updatedAt:string;checkedAt:string};
