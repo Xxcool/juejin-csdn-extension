@@ -2,9 +2,6 @@
 import type {CategoryMapping,ExtensionSettings} from '../types';
 
 export const defaultSettings:ExtensionSettings={
-  autoSyncAfterPublish:true,
-  wechatAutoSync:true,
-  cnblogsAutoSync:false,
   defaultCsdnCategory:'',
   categoryMappings:[],
   syncCover:true,
@@ -20,9 +17,6 @@ export function normalizeSettings(value:unknown):ExtensionSettings{
   const input=value&&typeof value==='object'?value as Partial<ExtensionSettings>:{};
   const mappings=Array.isArray(input.categoryMappings)?input.categoryMappings.map(item=>({sourceTag:clean(item?.sourceTag),targetCategory:clean(item?.targetCategory)})).filter(item=>item.sourceTag&&item.targetCategory):[];
   return{
-    autoSyncAfterPublish:input.autoSyncAfterPublish!==false,
-    wechatAutoSync:input.wechatAutoSync!==false,
-    cnblogsAutoSync:input.cnblogsAutoSync===true,
     defaultCsdnCategory:clean(input.defaultCsdnCategory),
     categoryMappings:mappings,
     syncCover:input.syncCover!==false,

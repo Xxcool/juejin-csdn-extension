@@ -18,9 +18,6 @@ const PLATFORM_META:Record<PlatformId,{name:string;badge:string;logo:string;chec
   wechat:{name:'微信公众号',badge:'图文草稿',logo:WECHAT_LOGO,check:'CHECK_WECHAT_STATUS',login:'OPEN_WECHAT_LOGIN'},
   cnblogs:{name:'博客园',badge:'随笔草稿',logo:CNBLOGS_LOGO,check:'CHECK_CNBLOGS_STATUS',login:'OPEN_CNBLOGS_LOGIN'}
 };
-let autoDefault=true;
-let wechatAutoDefault=true;
-let cnblogsAutoDefault=false;
 let syncedIds:Promise<Set<string>>|undefined;
 let currentDialogRefresh:(()=>Promise<void>)|null=null;
 let currentPublishRefresh:(()=>Promise<void>)|null=null;
@@ -272,7 +269,7 @@ async function openSyncDialog(source:SyncSource,trigger:HTMLElement){
     try{
       const freshAuths=await Promise.all((['csdn','wechat','cnblogs'] as PlatformId[]).map(checkPlatform));
       auths=freshAuths;
-      refreshPlatformSelection(selected,auths,[...(autoDefault?['csdn' as const]:[]),...(wechatAutoDefault?['wechat' as const]:[]),...(cnblogsAutoDefault?['cnblogs' as const]:[])],!initialized);
+      refreshPlatformSelection(selected,auths,!initialized);
       initialized=true;
     }finally{
       refreshing=false;
@@ -743,16 +740,10 @@ function onRuntimeMessage(message:any,_sender:chrome.runtime.MessageSender,sendR
 }
 
 if(isExtensionAlive()){
-  void safeSendMessage({type:'GET_SETTINGS'}).then(result=>{
-    if(!isExtensionAlive())return;
-    autoDefault=result?.settings?.autoSyncAfterPublish!==false;
-    wechatAutoDefault=result?.settings?.wechatAutoSync!==false;
-    cnblogsAutoDefault=result?.settings?.cnblogsAutoSync===true;
-    reportJuejinUuid();
-    inject();
-    globalObserver=new MutationObserver(scheduleInject);
-    globalObserver.observe(document.documentElement,{childList:true,subtree:true});
-  }).catch(()=>{});
+  reportJuejinUuid();
+  inject();
+  globalObserver=new MutationObserver(scheduleInject);
+  globalObserver.observe(document.documentElement,{childList:true,subtree:true});
 
   chrome.runtime.onMessage.addListener(onRuntimeMessage);
   document.addEventListener(PUBLISH_EVENT,handleJuejinPublished);

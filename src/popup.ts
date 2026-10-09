@@ -349,9 +349,6 @@ async function loadTasks(){
 }
 
 function renderSettings(settings:ExtensionSettings){
-  $<HTMLInputElement>('#auto-sync').checked=settings.autoSyncAfterPublish;
-  $<HTMLInputElement>('#wechat-auto-sync').checked=settings.wechatAutoSync;
-  $<HTMLInputElement>('#cnblogs-auto-sync').checked=settings.cnblogsAutoSync;
   $<HTMLInputElement>('#sync-cover').checked=settings.syncCover;
   $<HTMLInputElement>('#auto-summary').checked=settings.autoSummary;
   $<HTMLInputElement>('#append-source-link').checked=settings.appendSourceLink;
@@ -363,9 +360,6 @@ function renderSettings(settings:ExtensionSettings){
 
 async function saveSettingsFromForm(){
   currentSettings=normalizeSettings({
-    autoSyncAfterPublish:$<HTMLInputElement>('#auto-sync').checked,
-    wechatAutoSync:$<HTMLInputElement>('#wechat-auto-sync').checked,
-    cnblogsAutoSync:$<HTMLInputElement>('#cnblogs-auto-sync').checked,
     syncCover:$<HTMLInputElement>('#sync-cover').checked,
     autoSummary:$<HTMLInputElement>('#auto-summary').checked,
     appendSourceLink:$<HTMLInputElement>('#append-source-link').checked,
@@ -522,7 +516,7 @@ $<HTMLButtonElement>('#history-clear').addEventListener('click',async()=>{
   await loadTasks();
 });
 
-['#auto-sync','#wechat-auto-sync','#cnblogs-auto-sync','#sync-cover','#auto-summary','#append-source-link','#confirm-update','#image-failure'].forEach(selector=>$(selector).addEventListener('change',()=>void saveSettingsFromForm()));
+['#sync-cover','#auto-summary','#append-source-link','#confirm-update','#image-failure'].forEach(selector=>$(selector).addEventListener('change',()=>void saveSettingsFromForm()));
 ['#default-category','#category-mappings'].forEach(selector=>$(selector).addEventListener('change',()=>void saveSettingsFromForm()));
 
 $('#health-detail').addEventListener('click',()=>void chrome.tabs.create({url:STATUS_PAGE_URL,active:true}));

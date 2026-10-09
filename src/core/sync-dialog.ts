@@ -1,10 +1,10 @@
 // 多平台弹窗的状态判定：登录刷新不覆盖用户选择，消息受理不等于草稿保存成功。
 import type {PlatformId,TaskStatus} from '../types';
 
-export function refreshPlatformSelection(selected:Set<PlatformId>,auths:{platform:PlatformId;loggedIn:boolean}[],defaults:PlatformId[],initialize:boolean){
+export function refreshPlatformSelection(selected:Set<PlatformId>,auths:{platform:PlatformId;loggedIn:boolean}[],initialize:boolean){
   for(const auth of auths){
     if(!auth.loggedIn)selected.delete(auth.platform);
-    else if(initialize&&defaults.includes(auth.platform))selected.add(auth.platform);
+    else if(initialize)selected.add(auth.platform);
   }
 }
 

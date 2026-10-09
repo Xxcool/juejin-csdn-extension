@@ -244,12 +244,13 @@ describe('任务身份与弹窗结果',()=>{
   it('登录刷新保留取消勾选，登录失效移除选项，恢复后不偷偷重选',()=>{
     const selected=new Set<PlatformId>();
     const auths=[{platform:'csdn' as const,loggedIn:true},{platform:'wechat' as const,loggedIn:true}];
-    refreshPlatformSelection(selected,auths,['csdn','wechat'],true);
+    refreshPlatformSelection(selected,auths,true);
+    expect([...selected]).toEqual(['csdn','wechat']);
     selected.delete('wechat');
-    refreshPlatformSelection(selected,auths,['csdn','wechat'],false);
+    refreshPlatformSelection(selected,auths,false);
     expect([...selected]).toEqual(['csdn']);
-    refreshPlatformSelection(selected,[{platform:'csdn',loggedIn:false}],['csdn'],false);
-    refreshPlatformSelection(selected,auths,['csdn','wechat'],false);
+    refreshPlatformSelection(selected,[{platform:'csdn',loggedIn:false}],false);
+    refreshPlatformSelection(selected,auths,false);
     expect(selected.size).toBe(0);
   });
 

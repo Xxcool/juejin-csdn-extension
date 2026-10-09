@@ -123,9 +123,9 @@ describe('任务历史',()=>{
 });
 
 describe('同步设置',()=>{
-  it('为旧设置补齐 0.4 默认值',()=>{
-    expect(normalizeSettings({autoSyncAfterPublish:false})).toEqual({...defaultSettings,autoSyncAfterPublish:false});
-    expect(normalizeSettings({}).cnblogsAutoSync).toBe(false);
+  it('为旧设置补齐默认值',()=>{
+    expect(normalizeSettings({syncCover:false})).toEqual({...defaultSettings,syncCover:false});
+    expect(normalizeSettings({}).imageFailurePolicy).toBe('continue');
   });
 
   it('解析分类映射并按标签匹配、去重',()=>{
