@@ -4,7 +4,7 @@
   <p><b>将掘金文章同步到 CSDN、微信公众号与博客园草稿箱。</b></p>
   <p>
     <a href="https://github.com/juejin-sync/juejin-sync/releases/latest">📥 下载安装包</a> ·
-    <a href="https://artferry.vercel.app">🌐 项目网站</a> ·
+    <a href="https://juejinsync.vercel.app/">🌐 项目网站</a> ·
     <a href="CHANGELOG.md">📜 更新日志</a>
   </p>
 </div>
