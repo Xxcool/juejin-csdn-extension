@@ -7,14 +7,19 @@ export function articleIdentityKeys(article:SyncTask['article']){
 
 export function findMatchingTask(tasks:SyncTask[],article:SyncTask['article'],platform:SyncTask['platform']='csdn',accountId?:string){
   const identities=new Set(articleIdentityKeys(article));
-  return tasks.find(task=>articleIdentityKeys(task.article).some(identity=>identities.has(identity))&&task.platform===platform&&(platform==='wechat'?task.wechatAccountId===accountId:platform==='cnblogs'?task.cnblogsAccountId===accountId:true));
+  return tasks.find(task=>articleIdentityKeys(task.article).some(identity=>identities.has(identity))&&task.platform===platform&&(platform==='wechat'?task.wechatAccountId===accountId:platform==='cnblogs'?task.cnblogsAccountId===accountId:platform==='zhihu'?task.zhihuAccountId===accountId:true));
 }
 
-export function targetArticleId(task:SyncTask){return task.platform==='wechat'?task.wechatAppMsgId:task.platform==='cnblogs'?task.cnblogsPostId:task.csdnArticleId;}
+export function targetArticleId(task:SyncTask){return task.platform==='wechat'?task.wechatAppMsgId:task.platform==='cnblogs'?task.cnblogsPostId:task.platform==='zhihu'?task.zhihuArticleId:task.csdnArticleId;}
 
 export function extractCsdnArticleId(draftUrl?:string){
   if(!draftUrl)return undefined;
   try{return new URL(draftUrl).searchParams.get('articleId')||undefined;}catch{return undefined;}
+}
+
+export function extractZhihuArticleId(draftUrl?:string){
+  if(!draftUrl)return undefined;
+  try{const match=draftUrl.match(/\/p\/(\d+)/);return match?match[1]:undefined;}catch{return undefined;}
 }
 
 export function isInterruptedTask(task:SyncTask){

@@ -1,7 +1,7 @@
 // 掘金页面集成：新文章在发布成功后同步，历史文章通过统一弹窗立即同步。
 import type {Article,PlatformId,SyncTask} from './types';
 import {extractArticleId} from './source/juejin-api';
-import {CNBLOGS_LOGO,CSDN_LOGO,WECHAT_LOGO} from './targets/logos';
+import {CNBLOGS_LOGO,CSDN_LOGO,WECHAT_LOGO,ZHIHU_LOGO} from './targets/logos';
 import {refreshPlatformSelection,syncReplyState} from './core/sync-dialog';
 
 type EditorSnapshot={title:string;markdown:string;draftId:string;sourceUrl:string;tags?:string[];cover?:string;summary?:string};
@@ -16,7 +16,8 @@ const SYNC_ICON='<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 5.5A5.
 const PLATFORM_META:Record<PlatformId,{name:string;badge:string;logo:string;check:string;login:string}>={
   csdn:{name:'CSDN',badge:'博客草稿',logo:CSDN_LOGO,check:'CHECK_CSDN_STATUS',login:'OPEN_CSDN_LOGIN'},
   wechat:{name:'微信公众号',badge:'图文草稿',logo:WECHAT_LOGO,check:'CHECK_WECHAT_STATUS',login:'OPEN_WECHAT_LOGIN'},
-  cnblogs:{name:'博客园',badge:'随笔草稿',logo:CNBLOGS_LOGO,check:'CHECK_CNBLOGS_STATUS',login:'OPEN_CNBLOGS_LOGIN'}
+  cnblogs:{name:'博客园',badge:'随笔草稿',logo:CNBLOGS_LOGO,check:'CHECK_CNBLOGS_STATUS',login:'OPEN_CNBLOGS_LOGIN'},
+  zhihu:{name:'知乎',badge:'文章草稿',logo:ZHIHU_LOGO,check:'CHECK_ZHIHU_STATUS',login:'OPEN_ZHIHU_LOGIN'}
 };
 let syncedIds:Promise<Set<string>>|undefined;
 let currentDialogRefresh:(()=>Promise<void>)|null=null;
@@ -160,7 +161,7 @@ async function openSyncDialog(source:SyncSource,trigger:HTMLElement){
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
       </div>
       <div class="jc-note-content">
-        <b>纯端侧安全摆渡 · 仅保存至草稿箱</b>
+        <b>纯端侧同步 · 仅保存至草稿箱</b>
         <span>绝不自动公开发布。正文外链图片与源封面将在端侧安全转存至目标平台 CDN。</span>
       </div>
     </div>
@@ -191,7 +192,8 @@ async function openSyncDialog(source:SyncSource,trigger:HTMLElement){
   let auths:PlatformAuth[]=[
     {platform:'csdn',name:'CSDN',ok:true,loggedIn:false,loading:true},
     {platform:'wechat',name:'微信公众号',ok:true,loggedIn:false,loading:true},
-    {platform:'cnblogs',name:'博客园',ok:true,loggedIn:false,loading:true}
+    {platform:'cnblogs',name:'博客园',ok:true,loggedIn:false,loading:true},
+    {platform:'zhihu',name:'知乎',ok:true,loggedIn:false,loading:true}
   ];
   const selected=new Set<PlatformId>();
   // 提交期间冻结选择与刷新；默认勾选仅在首次检测完成时应用。
@@ -261,13 +263,14 @@ async function openSyncDialog(source:SyncSource,trigger:HTMLElement){
       auths=[
         {platform:'csdn',name:'CSDN',ok:true,loggedIn:false,loading:true},
         {platform:'wechat',name:'微信公众号',ok:true,loggedIn:false,loading:true},
-        {platform:'cnblogs',name:'博客园',ok:true,loggedIn:false,loading:true}
+        {platform:'cnblogs',name:'博客园',ok:true,loggedIn:false,loading:true},
+        {platform:'zhihu',name:'知乎',ok:true,loggedIn:false,loading:true}
       ];
       render();
     }
     refreshButton.classList.add('is-spinning');
     try{
-      const freshAuths=await Promise.all((['csdn','wechat','cnblogs'] as PlatformId[]).map(checkPlatform));
+      const freshAuths=await Promise.all((['csdn','wechat','cnblogs','zhihu'] as PlatformId[]).map(checkPlatform));
       auths=freshAuths;
       refreshPlatformSelection(selected,auths,!initialized);
       initialized=true;
@@ -304,9 +307,10 @@ async function openSyncDialog(source:SyncSource,trigger:HTMLElement){
 
     const results=await Promise.all(platforms.map(async platform=>{
       try{
-        const wechatAccountId=platform==='wechat'?auths.find(item=>item.platform===platform)?.accountId:undefined;
-        if(platform==='wechat'&&!wechatAccountId)throw new Error('无法确认公众号身份，请重新检测登录状态');
-        const result=await safeSendMessage({type:'SYNC_HISTORY_ARTICLE',platform,articleId:source.articleId,title:source.title,sourceUrl:`https://juejin.cn/post/${source.articleId}`,uuid:getJuejinUuid(),wechatAccountId});
+        const currentAuth=auths.find(item=>item.platform===platform);
+        const accountId=currentAuth?.accountId;
+        if(platform==='wechat'&&!accountId)throw new Error('无法确认公众号身份，请重新检测登录状态');
+        const result=await safeSendMessage({type:'SYNC_HISTORY_ARTICLE',platform,articleId:source.articleId,title:source.title,sourceUrl:`https://juejin.cn/post/${source.articleId}`,uuid:getJuejinUuid(),wechatAccountId:platform==='wechat'?accountId:undefined,accountId});
         if(result===undefined)throw new Error('扩展已重载，请刷新网页后重试');
         const state=syncReplyState(result);
         if(state.saved)rememberSynced(source.articleId,platform);
@@ -321,7 +325,7 @@ async function openSyncDialog(source:SyncSource,trigger:HTMLElement){
     const saved=results.filter(item=>item.saved);
     close();
     setSyncButtonState(trigger,saved.length===results.length?'saved':'idle',`已保存 ${saved.length} 个平台${pending.length?`，${pending.length} 个待处理`:''}${failed.length?`，${failed.length} 个失败`:''}`);
-    if(failed.length||pending.length)alert(`文章摆渡：\n${[...failed,...pending].map(item=>`• ${PLATFORM_META[item.platform].name}：${item.message}`).join('\n')}`);
+    if(failed.length||pending.length)alert(`掘金同步助手：\n${[...failed,...pending].map(item=>`• ${PLATFORM_META[item.platform].name}：${item.message}`).join('\n')}`);
   });
 
   render();
@@ -380,6 +384,13 @@ function injectPublishIntegration(){
         <span class="jc-platform-name">博客园</span>
         <span class="jc-platform-status"><span class="jc-publish-spinner"></span></span>
       </label>
+      <label class="jc-publish-platform is-unlogged" data-platform="zhihu">
+        <input type="checkbox" class="jc-platform-input" data-platform="zhihu" disabled />
+        <span class="jc-platform-checkbox" aria-hidden="true">✓</span>
+        <img src="${ZHIHU_LOGO}" class="jc-platform-icon" alt="" />
+        <span class="jc-platform-name">知乎</span>
+        <span class="jc-platform-status"><span class="jc-publish-spinner"></span></span>
+      </label>
     </div>
     <div class="jc-publish-sync-tip">掘金发布成功后自动保存至所选平台的草稿箱</div>
   </div>`;
@@ -387,7 +398,7 @@ function injectPublishIntegration(){
 
   let refreshing=false;
 
-  (['csdn','wechat','cnblogs'] as PlatformId[]).forEach(platform=>{
+  (['csdn','wechat','cnblogs','zhihu'] as PlatformId[]).forEach(platform=>{
     const card=field.querySelector<HTMLLabelElement>(`.jc-publish-platform[data-platform="${platform}"]`)!;
     const input=card.querySelector<HTMLInputElement>('.jc-platform-input')!;
 
@@ -449,9 +460,9 @@ function injectPublishIntegration(){
     if(refreshing||!isExtensionAlive())return;
     refreshing=true;
     // 加载态只更新界面，保留上次确认的账号供已选平台创建请求快照。
-    (['csdn','wechat','cnblogs'] as PlatformId[]).forEach(platform=>updateCardAuth({platform,name:PLATFORM_META[platform].name,ok:true,loggedIn:false,loading:true}));
+    (['csdn','wechat','cnblogs','zhihu'] as PlatformId[]).forEach(platform=>updateCardAuth({platform,name:PLATFORM_META[platform].name,ok:true,loggedIn:false,loading:true}));
     try{
-      const freshAuths=await Promise.all((['csdn','wechat','cnblogs'] as PlatformId[]).map(checkPlatform));
+      const freshAuths=await Promise.all((['csdn','wechat','cnblogs','zhihu'] as PlatformId[]).map(checkPlatform));
       // 旧面板或已移除字段的检测结果不得覆盖当前选择与账号。
       if(publishPanel!==panel||!field.isConnected||currentPublishRefresh!==refresh)return;
       publishAuths=freshAuths;
@@ -467,11 +478,11 @@ function injectPublishIntegration(){
 
 function handleJuejinPublishStart(){
   if(!isExtensionAlive()){
-    console.warn('[文章摆渡] 扩展上下文已失效，请刷新页面');
+    console.warn('[掘金同步助手] 扩展上下文已失效，请刷新页面');
     return;
   }
   if(!publishSelected.size){
-    console.log('[文章摆渡] 掘金发布开始，但未勾选同步目标平台');
+    console.log('[掘金同步助手] 掘金发布开始，但未勾选同步目标平台');
     return;
   }
   const raw=document.documentElement.getAttribute(PUBLISH_ATTRIBUTE);
@@ -482,17 +493,17 @@ function handleJuejinPublishStart(){
   const pending:PendingPublish={platforms:[...publishSelected],auths:publishAuths.map(auth=>({...auth})),panel:publishPanel,selection:publishSelected};
   try{
     pending.article=readEditorArticle();
-    console.log('[文章摆渡] 已记录发布前文章快照:',pending.article.title,'目标平台:',pending.platforms);
+    console.log('[掘金同步助手] 已记录发布前文章快照:',pending.article.title,'目标平台:',pending.platforms);
   }catch(error){
     pending.error=(error as Error).message;
-    console.warn('[文章摆渡] 捕获文章快照失败:',pending.error);
+    console.warn('[掘金同步助手] 捕获文章快照失败:',pending.error);
   }
   pendingPublishes.set(requestId,pending);
 }
 
 function handleJuejinPublished(){
   if(!isExtensionAlive()){
-    console.warn('[文章摆渡] 扩展上下文已失效，请刷新页面');
+    console.warn('[掘金同步助手] 扩展上下文已失效，请刷新页面');
     teardownContentScript();
     return;
   }
@@ -505,10 +516,10 @@ function handleJuejinPublished(){
   pendingPublishes.delete(published.requestId);
   if(!pending)return;
   if(!published.draftId||!published.articleId){
-    console.warn('[文章摆渡] 掘金发布未识别到有效的草稿或文章标识:',published);
+    console.warn('[掘金同步助手] 掘金发布未识别到有效的草稿或文章标识:',published);
     return;
   }
-  console.log('[文章摆渡] 掘金发布成功，触发多平台同步:',{published,platforms:pending.platforms});
+  console.log('[掘金同步助手] 掘金发布成功，触发多平台同步:',{published,platforms:pending.platforms});
   const {platforms,auths}=pending;
   // 只消费对应请求的选择，不能清空用户新打开面板中的选择。
   if(publishPanel===pending.panel&&publishSelected===pending.selection){
@@ -524,9 +535,10 @@ function handleJuejinPublished(){
     }
     const article={...snapshot,id:published.articleId,sourceDraftId:published.draftId,sourceUrl:`https://juejin.cn/post/${published.articleId}`};
     const requests=platforms.map(async platform=>{
-      const wechatAccountId=platform==='wechat'?auths.find(item=>item.platform===platform)?.accountId:undefined;
-      if(platform==='wechat'&&!wechatAccountId)throw new Error('微信公众号身份已失效，请从文章列表重新同步');
-      const result=await safeSendMessage({type:'SYNC_NEW_ARTICLE',platform,article,wechatAccountId});
+      const currentAuth=auths.find(item=>item.platform===platform);
+      const accountId=currentAuth?.accountId;
+      if(platform==='wechat'&&!accountId)throw new Error('微信公众号身份已失效，请从文章列表重新同步');
+      const result=await safeSendMessage({type:'SYNC_NEW_ARTICLE',platform,article,wechatAccountId:platform==='wechat'?accountId:undefined,accountId});
       if(result===undefined)throw new Error('扩展已重载，请刷新网页后从文章列表重试');
       return{platform,...syncReplyState(result)};
     });
@@ -569,7 +581,7 @@ async function markSyncedButtons(){
   const ids=await syncedArticleIds();
   buttons.forEach(button=>{
     const articleId=button.dataset.articleId||'';
-    if(button.dataset.state==='idle'&&(ids.has(`csdn:${articleId}`)||ids.has(`wechat:${articleId}`)))setSyncButtonState(button,'saved','已同步，可再次选择');
+    if(button.dataset.state==='idle'&&(ids.has(`csdn:${articleId}`)||ids.has(`wechat:${articleId}`)||ids.has(`cnblogs:${articleId}`)||ids.has(`zhihu:${articleId}`)))setSyncButtonState(button,'saved','已同步，可再次选择');
   });
 }
 
@@ -643,7 +655,7 @@ async function resumePendingHistory(){
   try{
     const result=await safeSendMessage({type:'RESUME_PENDING_HISTORY'});
     if(!result?.ok){
-      if(result?.message)alert(`文章摆渡：${result.message}`);
+      if(result?.message)alert(`掘金同步助手：${result.message}`);
       return;
     }
     if(result.resumed||result.errors?.length){
@@ -656,7 +668,7 @@ async function resumePendingHistory(){
         else notices.push(`• ${PLATFORM_META[resumed.platform].name}：${state.message}`);
       }
       for(const error of errors)notices.push(`• ${PLATFORM_META[error.platform].name}：${error.message}`);
-      if(notices.length)alert(`文章摆渡：\n${notices.join('\n')}`);
+      if(notices.length)alert(`掘金同步助手：\n${notices.join('\n')}`);
       syncedIds=undefined;
       void markSyncedButtons();
     }

@@ -741,6 +741,12 @@ main {
   border: 1px solid rgba(46, 122, 204, 0.28);
 }
 
+.platform-badge.zhihu {
+  background: rgba(0, 102, 255, 0.1);
+  color: #0066ff;
+  border: 1px solid rgba(0, 102, 255, 0.28);
+}
+
 @media (prefers-color-scheme: dark) {
   .platform-badge.csdn {
     background: rgba(252, 85, 49, 0.18);
@@ -756,6 +762,11 @@ main {
     background: rgba(46, 122, 204, 0.2);
     color: #8dcefc;
     border-color: rgba(141, 206, 252, 0.38);
+  }
+  .platform-badge.zhihu {
+    background: rgba(0, 102, 255, 0.2);
+    color: #4d94ff;
+    border-color: rgba(77, 148, 255, 0.38);
   }
 }
 

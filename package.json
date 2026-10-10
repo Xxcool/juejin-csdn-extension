@@ -1,8 +1,8 @@
 {
   "name": "juejin-sync",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "private": true,
-  "description": "将掘金文章同步到多个内容平台的草稿箱",
+  "description": "将掘金文章同步到多个内容平台（CSDN、微信公众号、博客园、知乎）的草稿箱",
   "homepage": "https://juejinsync.vercel.app/",
   "license": "MIT",
   "repository": {
@@ -22,12 +22,14 @@
   "devDependencies": {
     "@types/archiver": "^8.0.0",
     "@types/chrome": "^0.0.326",
+    "@types/js-md5": "^0.8.0",
     "archiver": "^8.0.0",
     "esbuild": "^0.25.9",
     "typescript": "^5.9.2",
     "vitest": "^4.1.11"
   },
   "dependencies": {
+    "js-md5": "^0.9.2",
     "marked": "^18.0.11",
     "mermaid": "^11.17.2"
   }

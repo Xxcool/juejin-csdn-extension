@@ -142,5 +142,21 @@
       "excludedInitiatorDomains": ["juejin.cn"],
       "resourceTypes": ["xmlhttprequest"]
     }
+  },
+  {
+    "id": 10,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {"header": "Origin", "operation": "set", "value": "https://zhuanlan.zhihu.com"},
+        {"header": "Referer", "operation": "set", "value": "https://zhuanlan.zhihu.com/"}
+      ]
+    },
+    "condition": {
+      "urlFilter": "||zhihu-pics-upload.zhimg.com/",
+      "excludedInitiatorDomains": ["zhihu.com"],
+      "resourceTypes": ["xmlhttprequest"]
+    }
   }
 ]

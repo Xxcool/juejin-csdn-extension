@@ -429,7 +429,7 @@ describe('v0.6.0 体验深化',()=>{
     expect(buildTaskNotification(noStats,9000)).toBeUndefined();
     expect(buildTaskNotification(noStats,10000)).toMatchObject({kind:'saved'});
     const failedTask:SyncTask={id:'notify-2',article,platform:'csdn',status:'failed',createdAt:'2026-09-01T00:00:00Z',updatedAt:'2026-09-01T00:00:00Z',attempts:1,error:'请先登录 CSDN',diagnostic:{stage:'authentication',category:'login',message:'请先登录 CSDN',suggestion:'',occurredAt:'2026-09-01T00:00:00Z'}};
-    expect(buildTaskNotification(failedTask,15000)).toMatchObject({kind:'failed',title:'文章摆渡同步需要处理'});
+    expect(buildTaskNotification(failedTask,15000)).toMatchObject({kind:'failed',title:'掘金同步助手需要处理'});
     expect(buildTaskNotification(failedTask,15000)!.message).toContain('请先登录 CSDN');
     // 快速失败（如未登录 200ms 内失败）也必须通知，避免用户切走后误以为同步成功
     expect(buildTaskNotification({...failedTask,stats:undefined},200)).toMatchObject({kind:'failed'});

@@ -4,7 +4,7 @@ export const HEALTH_URL='https://raw.githubusercontent.com/juejin-sync/juejin-sy
 export const STATUS_PAGE_URL='https://juejin-sync.github.io/juejin-sync/status.html';
 
 export type PlatformHealth='ok'|'degraded'|'broken'|'unknown';
-export type HealthStatus={csdn:PlatformHealth;juejin:PlatformHealth;wechat?:PlatformHealth;cnblogs?:PlatformHealth;message:string;sourceUrl:string;updatedAt:string;checkedAt:string};
+export type HealthStatus={csdn:PlatformHealth;juejin:PlatformHealth;wechat?:PlatformHealth;cnblogs?:PlatformHealth;zhihu?:PlatformHealth;message:string;sourceUrl:string;updatedAt:string;checkedAt:string};
 
 /** 解析远程健康 JSON；结构异常或字段缺失时按 unknown 降级，不抛错。 */
 export function parseHealthPayload(value:unknown):HealthStatus{
@@ -15,6 +15,7 @@ export function parseHealthPayload(value:unknown):HealthStatus{
     juejin:level(input.juejin),
     wechat:level(input.wechat),
     cnblogs:level(input.cnblogs),
+    zhihu:level(input.zhihu),
     message:typeof input.message==='string'?input.message.slice(0,200):'',
     sourceUrl:STATUS_PAGE_URL,
     updatedAt:typeof input.updatedAt==='string'?input.updatedAt:'',
@@ -63,5 +64,5 @@ export async function refreshHealthIfNeeded(force=false):Promise<HealthStatus|un
 
 /** 仅任一平台 broken 时弹警示；degraded/unknown 不打扰用户。 */
 export function isHealthAlert(status:HealthStatus|undefined):boolean{
-  return status?.csdn==='broken'||status?.juejin==='broken'||status?.wechat==='broken'||status?.cnblogs==='broken';
+  return status?.csdn==='broken'||status?.juejin==='broken'||status?.wechat==='broken'||status?.cnblogs==='broken'||status?.zhihu==='broken';
 }

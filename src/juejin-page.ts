@@ -28,7 +28,7 @@ function rememberTags(url:string,text:string,requestDraftId:string){
 function beginPublish(url:string,method:string){
   if(!isJuejinPublishRequest(url,method))return undefined;
   const requestId=String(++publishSequence);
-  console.log('[文章摆渡] 侦测到掘金发布请求:',url,{requestId});
+  console.log('[掘金同步助手] 侦测到掘金发布请求:',url,{requestId});
   document.documentElement.setAttribute(PUBLISH_ATTRIBUTE,JSON.stringify({requestId}));
   document.dispatchEvent(new Event(PUBLISH_START_EVENT));
   document.documentElement.removeAttribute(PUBLISH_ATTRIBUTE);
@@ -37,7 +37,7 @@ function beginPublish(url:string,method:string){
 
 function finishPublish(requestId:string|undefined,success?:ReturnType<typeof parseJuejinPublishSuccess>){
   if(!requestId)return;
-  console.log('[文章摆渡] 掘金发布请求结束:',{requestId,success});
+  console.log('[掘金同步助手] 掘金发布请求结束:',{requestId,success});
   document.documentElement.setAttribute(PUBLISH_ATTRIBUTE,JSON.stringify({requestId,...success}));
   document.dispatchEvent(new Event(PUBLISH_EVENT));
   document.documentElement.removeAttribute(PUBLISH_ATTRIBUTE);
@@ -65,7 +65,7 @@ function observeDraftApi(){
             const text=await response.clone().text();
             success=parseJuejinPublishSuccess(url,method,body,response.status,text,requestDraftId);
           }
-        }catch(err){console.warn('[文章摆渡] 解析发布响应异常 (fetch):',err);}
+        }catch(err){console.warn('[掘金同步助手] 解析发布响应异常 (fetch):',err);}
         return response;
       }finally{
         // HTTP、业务及网络失败均释放本次快照，不触发同步。
@@ -91,7 +91,7 @@ function observeDraftApi(){
           const text=typeof this.response==='string'?this.response:JSON.stringify(this.response);
           rememberTags(url,text,requestDraftId);
           success=parseJuejinPublishSuccess(url,method,body,this.status,text,requestDraftId);
-        }catch(err){console.warn('[文章摆渡] 解析发布响应异常 (XHR):',err);}
+        }catch(err){console.warn('[掘金同步助手] 解析发布响应异常 (XHR):',err);}
         finishPublish(requestId,success);
       };
       this.addEventListener('loadend',onEnd,{once:true});

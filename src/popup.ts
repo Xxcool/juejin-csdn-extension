@@ -1,5 +1,4 @@
-// 插件弹窗交互：双 Tab 仪表盘导航、平台登录状态、同步历史与设置管理。
-import type {ExtensionSettings,SyncTask,TaskStatus} from './types';
+import type {ExtensionSettings,PlatformId,SyncTask,TaskStatus} from './types';
 import {categoryLabels,stageLabels} from './core/diagnostic';
 import {defaultSettings,formatCategoryMappings,normalizeSettings,parseCategoryMappings} from './core/settings';
 import {isActiveTask,isRetryableTask} from './core/task';
@@ -9,10 +8,12 @@ type LoginStatus='checking'|'logged-in'|'logged-out'|'error';
 let loginStatus:LoginStatus='checking';
 let wechatLoginStatus:LoginStatus='checking';
 let cnblogsLoginStatus:LoginStatus='checking';
-let selectedPlatform:'csdn'|'wechat'|'cnblogs'='csdn';
+let zhihuLoginStatus:LoginStatus='checking';
+let selectedPlatform:PlatformId='csdn';
 let csdnAccount='';
 let wechatAccount='';
 let cnblogsAccount='';
+let zhihuAccount='';
 let checkSequence=0;
 let historyFilter:'all'|'saved'|'failed'|'working'='all';
 let currentSettings:ExtensionSettings=defaultSettings;
@@ -20,9 +21,9 @@ let currentTab:'history'|'settings'='history';
 
 function renderPlatformTrigger(){
   const trigger=$('#platform-trigger');
-  const status=selectedPlatform==='csdn'?loginStatus:selectedPlatform==='wechat'?wechatLoginStatus:cnblogsLoginStatus;
-  const account=selectedPlatform==='csdn'?csdnAccount:selectedPlatform==='wechat'?wechatAccount:cnblogsAccount;
-  const name=selectedPlatform==='csdn'?'CSDN':selectedPlatform==='wechat'?'微信':'博客园';
+  const status=selectedPlatform==='csdn'?loginStatus:selectedPlatform==='wechat'?wechatLoginStatus:selectedPlatform==='cnblogs'?cnblogsLoginStatus:zhihuLoginStatus;
+  const account=selectedPlatform==='csdn'?csdnAccount:selectedPlatform==='wechat'?wechatAccount:selectedPlatform==='cnblogs'?cnblogsAccount:zhihuAccount;
+  const name=selectedPlatform==='csdn'?'CSDN':selectedPlatform==='wechat'?'微信':selectedPlatform==='cnblogs'?'博客园':'知乎';
   trigger.className=`platform-pill ${status==='logged-in'?'logged':status==='logged-out'?'login-link':status}`;
   $('#platform-trigger-text').textContent=status==='checking'?`${name} 检测中…`:status==='logged-in'?`${name}${account?` · ${account}`:''} ✓`:status==='logged-out'?`${name} 未登录`: `${name} 检测失败`;
 }
@@ -34,7 +35,7 @@ function setPlatformMenu(open:boolean){
   menu.hidden=!open;
 }
 
-function selectPlatform(platform:'csdn'|'wechat'|'cnblogs'){
+function selectPlatform(platform:PlatformId){
   selectedPlatform=platform;
   document.querySelectorAll<HTMLButtonElement>('.platform-option').forEach(option=>{
     const selected=option.dataset.platform===platform;
@@ -147,6 +148,17 @@ async function checkCnblogsLogin(){
   }catch(error){cnblogsLoginStatus='error';pill.className='platform-option error'+(selectedPlatform==='cnblogs'?' selected':'');text.textContent='博客园检测失败 · 点击重试';toast((error as Error).message);}finally{renderPlatformTrigger();}
 }
 
+async function checkZhihuLogin(){
+  const pill=$('#zhihu-login-state');const text=$('#zhihu-login-text');
+  zhihuLoginStatus='checking';pill.className='platform-option checking'+(selectedPlatform==='zhihu'?' selected':'');text.textContent='知乎检测中…';renderPlatformTrigger();
+  try{
+    const result=await chrome.runtime.sendMessage({type:'CHECK_ZHIHU_STATUS'});
+    if(result?.loggedIn){zhihuLoginStatus='logged-in';zhihuAccount=result.account||'';pill.className='platform-option logged'+(selectedPlatform==='zhihu'?' selected':'');text.textContent=result.account?`知乎 · ${result.account}`:'知乎已登录';pill.title='知乎已登录，点击刷新状态';}
+    else if(result?.ok){zhihuLoginStatus='logged-out';zhihuAccount='';pill.className='platform-option login-link'+(selectedPlatform==='zhihu'?' selected':'');text.textContent='知乎未登录 · 点击登录';pill.title='点击登录知乎专栏';}
+    else throw new Error(result?.message||'知乎登录检测失败');
+  }catch(error){zhihuLoginStatus='error';pill.className='platform-option error'+(selectedPlatform==='zhihu'?' selected':'');text.textContent='知乎检测失败 · 点击重试';toast((error as Error).message);}finally{renderPlatformTrigger();}
+}
+
 function escapeHtml(value:string){
   return value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]!));
 }
@@ -201,12 +213,12 @@ function taskCard(task:SyncTask){
   const progressPercent=task.progress?.total?Math.min(100,Math.max(0,Math.round(task.progress.current/task.progress.total*100))):0;
   const progress=task.progress?`<div class="task-progress-box">
     <div class="progress-info">
-      <span class="progress-msg">${escapeHtml(task.progress.message||'正在摆渡中…')}</span>
+      <span class="progress-msg">${escapeHtml(task.progress.message||'正在同步…')}</span>
       <span class="progress-percent">${task.progress.total?`${progressPercent}%`:'进行中…'}</span>
     </div>
     <div class="task-progress ${task.progress.total?'':'indeterminate'}"><span style="width:${task.progress.total?progressPercent:35}%"></span></div>
   </div>`:'';
-  const platformName=task.platform==='wechat'?'微信公众号':task.platform==='cnblogs'?'博客园':'CSDN';
+  const platformName=task.platform==='wechat'?'微信公众号':task.platform==='cnblogs'?'博客园':task.platform==='zhihu'?'知乎':'CSDN';
   const bottomStats=stats?`<span>${platformName}</span><i>·</i>${stats}`:`<span>${platformName}草稿同步</span>`;
   return`<div class="history-card ${kind}">
     <div class="task-main-row">
@@ -273,8 +285,8 @@ async function loadTasks(){
             <span class="beacon-star"></span>
           </div>
         </div>
-        <h2 class="empty-headline harbor-headline">${all.length?'当前筛选下无记录':'准备就绪，开启摆渡'}</h2>
-        <p class="empty-subtext harbor-subtext">${all.length?'可尝试切换上方的状态筛选条件。':'在掘金发文时开启同步勾选，文章与图片将如期摆渡至目标草稿箱。'}</p>
+        <h2 class="empty-headline harbor-headline">${all.length?'当前筛选下无记录':'准备开始同步'}</h2>
+        <p class="empty-subtext harbor-subtext">${all.length?'可尝试切换上方的状态筛选条件。':'在掘金发文时选择同步平台，文章与图片将保存到目标草稿箱。'}</p>
         ${all.length?'':`<button id="btn-goto-juejin" class="btn-launch-juejin btn-embark">
           <span>前往掘金文章管理</span>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 17l9.2-9.2M17 17V8H8"/></svg>
@@ -282,7 +294,7 @@ async function loadTasks(){
         <div class="guide-card">
           <div class="guide-card-header">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-            <span>只需 3 步完成摆渡</span>
+            <span>只需 3 步完成同步</span>
           </div>
           <div class="guide-steps">
             <div class="guide-step-item">
@@ -491,6 +503,12 @@ $('#cnblogs-login-state').addEventListener('click',()=>{
   else if(cnblogsLoginStatus==='error')void chrome.runtime.sendMessage({type:'OPEN_CNBLOGS_LOGIN'});
   else void checkCnblogsLogin();
 });
+$('#zhihu-login-state').addEventListener('click',()=>{
+  selectPlatform('zhihu');
+  if(zhihuLoginStatus==='logged-out')void chrome.runtime.sendMessage({type:'OPEN_ZHIHU_LOGIN'});
+  else if(zhihuLoginStatus==='error')void chrome.runtime.sendMessage({type:'OPEN_ZHIHU_LOGIN'});
+  else void checkZhihuLogin();
+});
 document.addEventListener('click',event=>{
   if(!(event.target as Element).closest('.platform-switcher'))setPlatformMenu(false);
 });
@@ -551,4 +569,5 @@ void loadCsdnCategories();
 void checkLogin();
 void checkWechatLogin();
 void checkCnblogsLogin();
+void checkZhihuLogin();
 void checkHealthBanner();
