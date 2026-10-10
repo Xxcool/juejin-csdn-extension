@@ -137,9 +137,7 @@ async function openSyncDialog(source:SyncSource,trigger:HTMLElement){
 <section class="jc-sync-dialog" role="dialog" aria-modal="true" aria-labelledby="jc-sync-title" tabindex="-1">
   <header class="jc-dialog-header">
     <div class="jc-dialog-brand">
-      <div class="jc-dialog-emblem" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 17l20 0"/><path d="M4 17l2 -6h12l2 6"/><path d="M12 4v7"/><path d="M12 4l5 4h-5"/></svg>
-      </div>
+      <img class="jc-dialog-emblem" src="${chrome.runtime.getURL('logo.svg')}" width="36" height="36" alt="" aria-hidden="true">
       <div class="jc-dialog-titles">
         <h2 id="jc-sync-title">同步到多平台</h2>
         <p>检测平台状态 · 一键同步为对应草稿</p>
