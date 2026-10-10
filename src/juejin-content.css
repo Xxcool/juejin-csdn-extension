@@ -349,19 +349,8 @@ body[data-theme="dark"] .jc-publish-login { background: rgba(30, 128, 255, 0.15)
 .jc-dialog-emblem {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #1e80ff 0%, #1159e6 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(30, 128, 255, 0.28);
+  display: block;
   flex-shrink: 0;
-}
-
-.jc-dialog-emblem svg {
-  width: 18px;
-  height: 18px;
 }
 
 .jc-dialog-titles h2 {
